@@ -30,7 +30,7 @@ function sendViaWhatsApp(){
   const msg=document.getElementById('fm').value||'';
   const wa_msg=`Hi Acme Infotech,\n\n*Name:* ${n}\n*Phone:* ${p}\n*Enquiry For:* ${service}\n*Location:* ${location}\n*Budget:* ${budget}\n*Message:* ${msg||'Please contact me for a quote.'}\n\nSent from acmeinfotechsecuritysystem.com`;
   const encoded=encodeURIComponent(wa_msg);
-  window.open(`https://wa.me/918401726096?text=${encoded}`,'_blank');
+  window.open(`https://wa.me/919033999401?text=${encoded}`,'_blank');
   document.getElementById('formMsg').style.display='block';
   document.getElementById('formMsg').textContent='✅ Opening WhatsApp with your enquiry details...';
 }
@@ -101,14 +101,14 @@ function closeWaPopup(){
 }
 function waQuick(msg){
   const encoded=encodeURIComponent('Hi Acme Infotech,\n\n'+msg+'\n\nPlease send me details and pricing.');
-  window.open('https://wa.me/918401726096?text='+encoded,'_blank');
+  window.open('https://wa.me/919033999401?text='+encoded,'_blank');
 }
 function waSendCustom(){
   const inp=document.getElementById('waInp');
   const msg=inp.value.trim();
   if(!msg)return;
   const encoded=encodeURIComponent('Hi Acme Infotech,\n\n'+msg);
-  window.open('https://wa.me/918401726096?text='+encoded,'_blank');
+  window.open('https://wa.me/919033999401?text='+encoded,'_blank');
   inp.value='';
 }
 function waKeyPress(e){if(e.key==='Enter')waSendCustom()}

@@ -4,3 +4,5 @@ dist/
 .env
 split.ps1
 split.py
+
+.vercel

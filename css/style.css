@@ -1,4 +1,4 @@
-﻿* {
+* {
   margin: 0;
   padding: 0;
   box-sizing: border-box
@@ -401,7 +401,7 @@ body {
 }
 
 .hero-h1 .stroke {
-  -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.2);
+  -webkit-text-stroke: 1.5px rgba(15, 23, 42, 0.15);
   color: transparent
 }
 
@@ -743,7 +743,8 @@ h2.section-h {
   font-weight: 800;
   padding: 6px 16px;
   border-radius: 100px;
-  letter-spacing: .5px
+  letter-spacing: .5px;
+  z-index: 10;
 }
 
 /* ── SERVICES ── */
@@ -1454,9 +1455,7 @@ h2.section-h {
 .date-badge {
   font-size: .7rem;
   color: var(--muted);
-  position: absolute;
-  top: 20px;
-  left: 24px
+  margin-bottom: 6px;
 }
 
 .google-cta {
@@ -1771,14 +1770,21 @@ h2.section-h {
 
 .mob-badge-text {
   font-size: .78rem;
-  color: var(--white);
+  color: #fff;
   font-weight: 500
 }
 
 .mob-badge-text small {
   display: block;
   font-size: .7rem;
-  color: var(--muted)
+  color: rgba(255, 255, 255, 0.7)
+}
+
+.map-actions-wrap {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
 }
 
 .contact-info-items {
@@ -2033,6 +2039,15 @@ footer {
 .s-btn:hover {
   border-color: var(--lime);
   color: var(--lime)
+}
+
+.foot-col summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.foot-col summary::-webkit-details-marker {
+  display: none;
 }
 
 .foot-col h5 {

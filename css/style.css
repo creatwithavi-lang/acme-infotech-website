@@ -152,7 +152,7 @@ body {
 }
 
 #nav.solid {
-  background: rgba(8, 9, 13, 0.96);
+  background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(24px);
   border-bottom: 1px solid var(--edge);
 }
@@ -2132,10 +2132,10 @@ footer {
 /* ── WA POPUP CHAT WIDGET ── */
 .wa-widget {
   position: fixed;
-  bottom: 100px;
+  bottom: 95px;
   right: 28px;
   z-index: 799;
-  width: 320px
+  width: 280px
 }
 
 .wa-popup {
@@ -2331,7 +2331,7 @@ footer {
   right: 0;
   width: 100%;
   z-index: 899;
-  background: rgba(8, 9, 13, .98);
+  background: rgba(255, 255, 255, 0.98);
   border-bottom: 1px solid var(--edge);
   padding: 24px;
   flex-direction: column;
@@ -2472,8 +2472,35 @@ footer {
     top: 72px
   }
 
+  #hero {
+    min-height: auto;
+    padding-top: 120px;
+    padding-bottom: 60px;
+  }
+
+  .hero-eyebrow {
+    height: auto;
+    flex-wrap: wrap;
+    justify-content: center;
+    border-radius: 20px;
+    padding: 8px 12px;
+    line-height: 1.5;
+  }
+
+  .eyebrow-dot {
+    flex-shrink: 0;
+  }
+
+  .hero-eyebrow > span[style] {
+    display: none !important;
+  }
+
   .hero-h1 {
     letter-spacing: -1px
+  }
+
+  .prod-tabs {
+    display: none !important;
   }
 
   .services-grid {
@@ -2493,16 +2520,22 @@ footer {
   }
 
   .hero-stats {
-    flex-direction: column
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 
   .h-stat {
-    border-right: none;
-    border-bottom: 1px solid var(--edge)
+    border-right: 1px solid var(--edge);
+    border-bottom: 1px solid var(--edge);
+    padding: 16px 10px;
   }
 
-  .h-stat:last-child {
-    border-bottom: none
+  .h-stat:nth-child(even) {
+    border-right: none;
+  }
+
+  .h-stat:nth-last-child(-n+2) {
+    border-bottom: none;
   }
 
   .fg-2 {
@@ -2510,7 +2543,26 @@ footer {
   }
 
   .reviews-grid {
-    grid-template-columns: 1fr
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    gap: 16px;
+    padding-bottom: 24px;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .reviews-grid::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .rev-card {
+    min-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+    scroll-snap-align: start;
+    flex-shrink: 0;
+    margin: 0;
   }
 
   .price-table {
@@ -2523,19 +2575,34 @@ footer {
   }
 
   .wa-widget {
-    right: 16px;
-    width: calc(100% - 32px)
+    display: none !important;
   }
 
   .review-score-hero {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     gap: 20px
+  }
+
+  .rating-bars,
+  .score-divider {
+    display: none !important;
+  }
+
+  .score-big {
+    width: 100%;
+    text-align: center;
   }
 
   .score-platforms {
     flex-direction: row;
-    flex-wrap: wrap
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .plat-badge {
+    flex: 1 1 calc(50% - 10px);
+    justify-content: space-between;
   }
 
   .cb-text {

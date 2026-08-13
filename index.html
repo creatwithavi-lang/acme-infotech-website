@@ -1537,11 +1537,15 @@
     /* ── WA POPUP WIDGET ── */
     let waOpen = false;
     setTimeout(() => {
-      if (!waOpen) { openWaPopup(); }
+      if (!waOpen && window.innerWidth > 768) { openWaPopup(); }
     }, 6000);
 
     function toggleWaPopup(e) {
       e.preventDefault();
+      if (window.innerWidth <= 768) {
+        window.open('https://wa.me/919033999401?text=Hi%20Acme%20Infotech', '_blank');
+        return;
+      }
       waOpen ? closeWaPopup() : openWaPopup();
     }
     function openWaPopup() {
@@ -1616,10 +1620,11 @@
           const card = revGrid.querySelector('.rev-card');
           if (!card) return;
           const cardWidth = card.offsetWidth + 16;
+          const currentIndex = Math.round(revGrid.scrollLeft / cardWidth);
           if (revGrid.scrollLeft + revGrid.clientWidth >= revGrid.scrollWidth - 10) {
             revGrid.scrollTo({ left: 0, behavior: 'smooth' });
           } else {
-            revGrid.scrollBy({ left: cardWidth, behavior: 'smooth' });
+            revGrid.scrollTo({ left: (currentIndex + 1) * cardWidth, behavior: 'smooth' });
           }
         }
       }, 3500);

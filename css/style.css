@@ -2169,7 +2169,7 @@ footer {
   bottom: 95px;
   right: 28px;
   z-index: 799;
-  width: 280px
+  width: 240px
 }
 
 .wa-popup {
@@ -2192,33 +2192,33 @@ footer {
 
 .wa-popup-head {
   background: linear-gradient(135deg, #128c7e, #075e54);
-  padding: 16px 18px;
+  padding: 12px 14px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .wa-head-av {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: #25d366;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.3rem;
+  font-size: 1.1rem;
   flex-shrink: 0
 }
 
 .wa-head-info strong {
   color: #fff;
-  font-size: .9rem;
+  font-size: .8rem;
   display: block
 }
 
 .wa-head-info small {
   color: rgba(255, 255, 255, .7);
-  font-size: .72rem
+  font-size: .65rem
 }
 
 .wa-online {
@@ -2253,23 +2253,23 @@ footer {
 }
 
 .wa-popup-body {
-  padding: 16px 18px;
+  padding: 12px 14px;
   background: #e5ddd5
 }
 
 .wa-bubble {
   background: #fff;
   border-radius: 0 12px 12px 12px;
-  padding: 12px 14px;
-  max-width: 240px;
+  padding: 10px 12px;
+  max-width: 210px;
   margin-bottom: 8px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, .1)
 }
 
 .wa-bubble p {
-  font-size: .83rem;
+  font-size: .75rem;
   color: #303030;
-  line-height: 1.6
+  line-height: 1.5
 }
 
 .wa-bubble time {
@@ -2291,8 +2291,8 @@ footer {
   background: #fff;
   border: none;
   border-radius: 8px;
-  padding: 10px 14px;
-  font-size: .8rem;
+  padding: 8px 12px;
+  font-size: .75rem;
   color: #128c7e;
   font-weight: 600;
   cursor: pointer;

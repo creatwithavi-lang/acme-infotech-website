@@ -2559,10 +2559,12 @@ footer {
 
   .ready-btns {
     width: 100%;
+    justify-content: center;
+    gap: 10px;
   }
 
   .ready-btns a {
-    flex: 1 1 calc(50% - 6px);
+    flex: 1 1 calc(50% - 5px);
     padding: 12px 10px;
     font-size: .85rem;
   }

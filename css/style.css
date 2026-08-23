@@ -459,6 +459,38 @@ body {
   box-shadow: 0 0 40px rgba(37, 99, 235, .3)
 }
 
+.btn-call-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 28px;
+  font-size: .9rem;
+  background: rgba(255, 255, 255, .05);
+  color: var(--white);
+  border-radius: 100px;
+  text-decoration: none;
+  font-weight: 600;
+  border: 1px solid var(--edge);
+  transition: all .2s;
+  white-space: nowrap;
+}
+
+.btn-call-outline i {
+  margin-right: 6px;
+  width: 16px;
+  height: 16px;
+}
+
+.btn-call-outline:hover {
+  background: rgba(15, 23, 42, .05);
+}
+
+.ready-btns {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .btn-ghost {
   display: inline-flex;
   align-items: center;
@@ -2525,7 +2557,15 @@ footer {
     padding: 10px 12px
   }
 
+  .ready-btns {
+    width: 100%;
+  }
 
+  .ready-btns a {
+    flex: 1 1 calc(50% - 6px);
+    padding: 12px 10px;
+    font-size: .85rem;
+  }
 
   .review-score-hero {
     flex-direction: column;

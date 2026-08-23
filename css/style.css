@@ -64,6 +64,8 @@ body {
 }
 
 .cb-text {
+  display: inline-flex;
+  align-items: center;
   font-size: .78rem;
   color: white;
   letter-spacing: .3px
@@ -92,6 +94,10 @@ body {
 #callBanner svg, #callBanner i {
   width: 13px !important;
   height: 13px !important;
+}
+
+#callBanner svg {
+  stroke-width: 1.7;
 }
 
 @keyframes callPulse {

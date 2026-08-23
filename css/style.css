@@ -91,7 +91,8 @@ body {
   transform: scale(1.04)
 }
 
-#callBanner svg, #callBanner i {
+#callBanner svg,
+#callBanner i {
   width: 13px !important;
   height: 13px !important;
 }
@@ -2570,6 +2571,7 @@ footer {
     font-size: .85rem !important;
     justify-content: center !important;
     text-align: center !important;
+    gap: 10px !important;
   }
 
   .review-score-hero {

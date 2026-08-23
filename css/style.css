@@ -2133,7 +2133,7 @@ footer {
   position: fixed;
   bottom: 28px;
   right: 28px;
-  z-index: 800;
+  z-index: 9999;
   width: 58px;
   height: 58px;
   border-radius: 50%;
@@ -2168,7 +2168,7 @@ footer {
   position: fixed;
   bottom: 95px;
   right: 28px;
-  z-index: 799;
+  z-index: 9999;
   width: 240px
 }
 
@@ -2306,18 +2306,19 @@ footer {
 }
 
 .wa-popup-foot {
-  padding: 12px 18px;
+  padding: 10px 12px;
   background: #f0f0f0;
   display: flex;
   align-items: center;
-  gap: 10px
+  gap: 8px
 }
 
 .wa-inp {
   flex: 1;
+  min-width: 0;
   border: 1px solid #ddd;
   border-radius: 20px;
-  padding: 8px 14px;
+  padding: 8px 12px;
   font-size: .83rem;
   outline: none;
   color: #333;

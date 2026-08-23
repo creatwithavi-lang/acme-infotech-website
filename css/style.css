@@ -89,6 +89,11 @@ body {
   transform: scale(1.04)
 }
 
+#callBanner svg, #callBanner i {
+  width: 13px !important;
+  height: 13px !important;
+}
+
 @keyframes callPulse {
 
   0%,
@@ -2479,10 +2484,6 @@ footer {
 }
 
 @media(max-width:768px) {
-  .cb-number svg {
-    width: 13px;
-    height: 13px;
-  }
 
   .nav-links {
     display: none
@@ -2625,7 +2626,8 @@ footer {
     box-shadow: 0 2px 10px rgba(37, 99, 235, 0.04);
   }
 
-  .prod-cats-list span svg, .prod-cats-list span i {
+  .prod-cats-list span svg,
+  .prod-cats-list span i {
     color: var(--lime) !important;
     margin-right: 8px !important;
     width: 13px !important;

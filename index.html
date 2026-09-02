@@ -979,13 +979,8 @@
           business security for Surat businesses.</p>
       </div>
       <div class="blog-carousel">
-        <div class="blog-carousel-controls" aria-label="Blog carousel controls">
-          <button type="button" class="blog-car-btn" data-blog-prev aria-label="Previous blog">
-            <i data-lucide="chevron-left"></i>
-          </button>
-          <button type="button" class="blog-car-btn" data-blog-next aria-label="Next blog">
-            <i data-lucide="chevron-right"></i>
-          </button>
+        <div class="blog-carousel-controls">
+          <a href="/blog" class="btn-ghost" style="padding: 8px 16px; font-size: 0.9rem;">View All Blogs →</a>
         </div>
       <div class="blog-grid" data-blog-carousel>
         <p style="text-align: center; color: var(--muted2); width: 100%; padding: 40px 0;">Loading blogs...</p>
@@ -1484,19 +1479,19 @@
       }, 3500);
     }
 
-    /* ── HOMEPAGE BLOG LOOP CAROUSEL ── */
-    (function initBlogCarousel() {
+    /* ── HOMEPAGE BLOG GRID ── */
+    (function initBlogGrid() {
       const track = document.querySelector('[data-blog-carousel]');
       if (!track) return;
-      const prev = document.querySelector('[data-blog-prev]');
-      const next = document.querySelector('[data-blog-next]');
       const escapeText = value => String(value || '').replace(/[&<>"']/g, ch => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
       }[ch]));
       const renderBlogs = blogs => {
         if (!Array.isArray(blogs) || !blogs.length) return;
-        track.innerHTML = blogs.map(blog => `
-          <div class="blog-card">
+        // Limit to 3 blogs on desktop
+        const displayBlogs = blogs.slice(0, 3);
+        track.innerHTML = displayBlogs.map(blog => `
+          <div class="blog-card" style="scroll-snap-align: start;">
             <div class="blog-img blog-img-fit">
               <img class="blog-thumb-img" src="${escapeText(blog.image)}" alt="${escapeText(blog.imageAlt || blog.title)}" loading="lazy">
               <span class="blog-cat-badge">${escapeText(blog.category)}</span>
@@ -1509,77 +1504,8 @@
             </div>
           </div>
         `).join('');
-        resetToLatest();
       };
-      const getGap = () => parseFloat(getComputedStyle(track).gap) || 24;
-      const getStep = () => {
-        const card = track.querySelector('.blog-card');
-        return card ? card.getBoundingClientRect().width + getGap() : track.clientWidth;
-      };
-      const isAtEnd = () => track.scrollLeft + track.clientWidth >= track.scrollWidth - getStep() / 2;
-      const go = direction => {
-        if (direction > 0 && isAtEnd()) {
-          track.scrollTo({ left: 0, behavior: 'smooth' });
-          return;
-        }
-        if (direction < 0 && track.scrollLeft <= 4) {
-          track.scrollTo({ left: track.scrollWidth, behavior: 'smooth' });
-          return;
-        }
-        track.scrollBy({ left: direction * getStep(), behavior: 'smooth' });
-      };
-      prev?.addEventListener('click', () => go(-1));
-      next?.addEventListener('click', () => go(1));
-      const resetToLatest = () => track.scrollTo({ left: 0, behavior: 'auto' });
-      requestAnimationFrame(resetToLatest);
-      window.addEventListener('load', resetToLatest);
-      window.addEventListener('pageshow', resetToLatest);
-      let timer = null;
-      let touchStartX = 0;
-      let touchStartLeft = 0;
-      let isTouching = false;
-      const resume = () => {
-        clearInterval(timer);
-        if (!document.hidden) timer = setInterval(() => go(1), 4200);
-      };
-      const pause = () => {
-        clearInterval(timer);
-        timer = null;
-      };
-      resume();
-      track.addEventListener('mouseenter', pause);
-      track.addEventListener('mouseleave', resume);
-      track.addEventListener('touchstart', event => {
-        pause();
-        isTouching = true;
-        touchStartX = event.touches[0].clientX;
-        touchStartLeft = track.scrollLeft;
-      }, { passive: true });
-      track.addEventListener('touchmove', event => {
-        if (!isTouching) return;
-        const delta = event.touches[0].clientX - touchStartX;
-        if (Math.abs(delta) > 8) event.preventDefault();
-        track.scrollLeft = touchStartLeft - delta;
-      }, { passive: false });
-      track.addEventListener('touchend', event => {
-        if (!isTouching) return resume();
-        isTouching = false;
-        const delta = (event.changedTouches[0]?.clientX || touchStartX) - touchStartX;
-        const step = getStep();
-        let target = touchStartLeft;
-        if (Math.abs(delta) > 36) target = touchStartLeft + (delta < 0 ? step : -step);
-        target = Math.max(0, Math.min(target, track.scrollWidth - track.clientWidth));
-        track.scrollTo({ left: Math.round(target / step) * step, behavior: 'smooth' });
-        resume();
-      }, { passive: true });
-      track.addEventListener('touchcancel', () => {
-        isTouching = false;
-        resume();
-      }, { passive: true });
-      track.addEventListener('pointerdown', pause);
-      track.addEventListener('pointerup', resume);
-      track.addEventListener('pointercancel', resume);
-      document.addEventListener('visibilitychange', () => document.hidden ? pause() : resume());
+
       fetch('/api/blogs/latest')
         .then(response => response.ok ? response.json() : null)
         .then(data => renderBlogs(data?.blogs))
@@ -1609,6 +1535,22 @@
     adjustFooterAcc();
   </script>
 
+
+  <style>
+    @media (max-width: 768px) {
+      .blog-grid[data-blog-carousel] {
+        display: flex !important;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        gap: 16px;
+        padding-bottom: 24px;
+        -webkit-overflow-scrolling: touch;
+      }
+      .blog-grid[data-blog-carousel] > .blog-card {
+        flex: 0 0 85%;
+      }
+    }
+  </style>
 
   <!-- SEO: WebSite Schema with Sitelinks -->
   <script type="application/ld+json">

@@ -546,6 +546,7 @@ function renderBlogDetail(slug) {
 
 function absoluteUrl(url) {
   if (!url) return '';
+  if (url.startsWith('data:')) return url;
   return /^https?:\/\//i.test(url) ? url : `https://www.acmeinfotechsecuritysystem.com${url}`;
 }
 
@@ -565,7 +566,7 @@ function latestBlogsJson(limit = 8) {
     title: b.title,
     slug: b.slug,
     excerpt: b.excerpt,
-    image: b.featured_image && !String(b.featured_image).startsWith('data:') ? b.featured_image : '/images/blog_cctv.png',
+    image: b.featured_image || '/images/blog_cctv.png',
     imageAlt: b.featured_image_alt || b.title,
     category: b.category_name || 'Security',
     date: formatDate(b.published_at),
@@ -590,7 +591,7 @@ async function latestBlogsPayload(limit = 8) {
     if (!Array.isArray(data.blogs) || !data.blogs.length) return localBlogs;
     return data.blogs.slice(0, limit).map(blog => ({
       ...blog,
-      image: blog.image && !String(blog.image).startsWith('data:') ? blog.image : '/images/blog_cctv.png'
+      image: blog.image || '/images/blog_cctv.png'
     }));
   } catch {
     return localBlogs;

@@ -11,6 +11,7 @@ const UPLOAD_DIR = path.join(RUNTIME_ROOT, 'uploads', 'blogs');
 const DB_PATH = path.join(DATA_DIR, 'cms.sqlite');
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_TTL_MS = 1000 * 60 * 60 * 8;
+const SESSION_SECRET = process.env.SESSION_SECRET || process.env.ADMIN_PASSWORD || 'change-this-session-secret';
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 const MIME_EXT = {
   'image/jpeg': '.jpg',
@@ -294,6 +295,35 @@ function parseCookies(req) {
   }));
 }
 
+function signValue(value) {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(value).digest('base64url');
+}
+
+function createSessionCookie(admin) {
+  const payload = JSON.stringify({
+    user_id: admin.id,
+    name: admin.name,
+    email: admin.email,
+    role: admin.role,
+    csrf_token: crypto.randomBytes(24).toString('hex'),
+    expires_at: Date.now() + SESSION_TTL_MS
+  });
+  const encoded = Buffer.from(payload).toString('base64url');
+  return `${encoded}.${signValue(encoded)}`;
+}
+
+function verifySessionCookie(value) {
+  const [encoded, signature] = String(value || '').split('.');
+  if (!encoded || !signature || signValue(encoded) !== signature) return null;
+  try {
+    const session = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+    if (!session.expires_at || session.expires_at < Date.now()) return null;
+    return session;
+  } catch {
+    return null;
+  }
+}
+
 function send(res, status, body, type = 'text/html; charset=utf-8', headers = {}) {
   res.writeHead(status, { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', ...headers });
   res.end(body);
@@ -351,14 +381,11 @@ function parseMultipart(buffer, contentType) {
 }
 
 function currentUser(req) {
-  const sid = parseCookies(req).sid;
-  if (!sid) return null;
-  const session = db.prepare('SELECT sessions.id AS session_id, sessions.user_id, sessions.csrf_token, sessions.expires_at, users.name, users.email, users.role FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.id = ?').get(sid);
-  if (!session || session.expires_at < Date.now()) {
-    if (session) db.prepare('DELETE FROM sessions WHERE id = ?').run(sid);
-    return null;
-  }
-  return session;
+  const session = verifySessionCookie(parseCookies(req).sid);
+  if (!session) return null;
+  const admin = db.prepare('SELECT id, name, email, role FROM users WHERE email = ?').get(String(session.email || '').toLowerCase());
+  if (!admin || admin.role !== 'admin') return null;
+  return { ...admin, csrf_token: session.csrf_token, expires_at: session.expires_at };
 }
 
 function requireAdmin(req, res) {
@@ -497,10 +524,7 @@ async function handleAdminPost(req, res, pathname) {
     const form = parseUrlEncoded(await readBody(req));
     const admin = db.prepare('SELECT * FROM users WHERE email = ?').get(String(form.email || '').toLowerCase());
     if (!admin || !verifyPassword(form.password || '', admin.password)) return send(res, 401, loginPage('Invalid email or password.'));
-    const sid = crypto.randomBytes(32).toString('hex');
-    const csrf = crypto.randomBytes(24).toString('hex');
-    db.prepare('INSERT INTO sessions (id,user_id,csrf_token,expires_at) VALUES (?,?,?,?)').run(sid, admin.id, csrf, Date.now() + SESSION_TTL_MS);
-    return redirectWithCookie(res, '/admin', sid);
+    return redirectWithCookie(res, '/admin', createSessionCookie(admin));
   }
   if (!user || user.role !== 'admin') return redirect(res, '/admin/login');
   const contentType = req.headers['content-type'] || '';
@@ -509,7 +533,6 @@ async function handleAdminPost(req, res, pathname) {
   const form = parsed.fields;
   if (!checkCsrf(req, form)) return send(res, 403, 'Invalid CSRF token.');
   if (pathname === '/admin/logout') {
-    db.prepare('DELETE FROM sessions WHERE id = ?').run(user.id);
     res.writeHead(302, { Location: '/admin/login', 'Set-Cookie': 'sid=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0' });
     return res.end();
   }
@@ -543,22 +566,22 @@ async function handleAdminPost(req, res, pathname) {
     } else {
       db.prepare(`INSERT INTO blogs (title,slug,excerpt,content,featured_image,featured_image_alt,category_id,author,status,published_at,updated_at,seo_title,meta_description,focus_keyword,canonical_url,og_image,og_image_alt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(...values);
     }
-    return redirect(res, '/admin/blogs');
+    return send(res, 200, renderBlogs(user));
   }
   if (/^\/admin\/blogs\/\d+\/toggle$/.test(pathname)) {
     const id = Number(pathname.match(/\d+/)[0]);
     const b = db.prepare('SELECT * FROM blogs WHERE id = ?').get(id);
     if (b) db.prepare(`UPDATE blogs SET status = ?, published_at = ?, updated_at = ? WHERE id = ?`).run(b.status === 'published' ? 'draft' : 'published', b.status === 'published' ? b.published_at : nowIso(), nowIso(), id);
-    return redirect(res, '/admin/blogs');
+    return send(res, 200, renderBlogs(user));
   }
   if (/^\/admin\/blogs\/\d+\/delete$/.test(pathname)) {
     db.prepare('DELETE FROM blogs WHERE id = ?').run(Number(pathname.match(/\d+/)[0]));
-    return redirect(res, '/admin/blogs');
+    return send(res, 200, renderBlogs(user));
   }
   if (pathname === '/admin/categories') {
     const slug = slugify(form.slug || form.name);
     db.prepare('INSERT OR IGNORE INTO categories (name,slug,description) VALUES (?,?,?)').run(form.name, slug, form.description || '');
-    return redirect(res, '/admin/categories');
+    return send(res, 200, renderCategories(user));
   }
   if (pathname === '/admin/upload') {
     try {

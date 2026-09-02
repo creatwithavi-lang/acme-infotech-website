@@ -3323,6 +3323,8 @@ details[open] > summary::after {
   scrollbar-width: none;
   -ms-overflow-style: none;
   padding: 0 4px 16px;
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
 }
 
 #blog .blog-grid[data-blog-carousel]::-webkit-scrollbar {
@@ -3343,13 +3345,11 @@ details[open] > summary::after {
 
 @media (max-width: 640px) {
   #blog .blog-carousel {
-    margin-top: 32px;
+    margin-top: 22px;
   }
 
   #blog .blog-carousel-controls {
-    justify-content: center;
-    margin-top: 0;
-    margin-bottom: 20px;
+    display: none;
   }
 
   #blog .blog-grid[data-blog-carousel] .blog-card {

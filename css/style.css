@@ -1961,8 +1961,8 @@ h2.section-h {
 }
 
 .blog-list-hero {
-  padding-top: 28px;
-  padding-bottom: 22px;
+  padding-top: 18px;
+  padding-bottom: 16px;
   background:
     linear-gradient(180deg, rgba(37, 99, 235, 0.06), rgba(255, 255, 255, 0)),
     linear-gradient(90deg, rgba(14, 165, 233, 0.05), rgba(255, 255, 255, 0));
@@ -1970,48 +1970,48 @@ h2.section-h {
 
 .blog-list-hero .breadcrumb,
 .blog-detail-hero .breadcrumb {
-  margin-bottom: 10px;
-  font-size: .74rem;
+  margin-bottom: 7px;
+  font-size: .68rem;
 }
 
 .blog-list-hero .page-kicker,
 .blog-detail-hero .page-kicker {
-  margin-bottom: 10px;
-  padding: 6px 11px;
-  font-size: .68rem;
-  letter-spacing: .7px;
+  margin-bottom: 8px;
+  padding: 5px 10px;
+  font-size: .62rem;
+  letter-spacing: .55px;
 }
 
 .blog-list-hero .page-title {
-  font-size: clamp(1.45rem, 2.05vw, 2.15rem);
+  font-size: clamp(1.28rem, 1.65vw, 1.75rem);
   max-width: 100%;
-  margin-bottom: 9px;
+  margin-bottom: 7px;
   line-height: 1.08;
   white-space: nowrap;
 }
 
 .blog-list-hero .page-lede {
-  font-size: .88rem;
-  line-height: 1.55;
-  max-width: 640px;
+  font-size: .78rem;
+  line-height: 1.45;
+  max-width: 620px;
 }
 
 .blog-detail-hero {
-  padding-top: 24px;
-  padding-bottom: 18px;
+  padding-top: 14px;
+  padding-bottom: 14px;
 }
 
 .blog-detail-hero .page-title {
-  font-size: clamp(1.42rem, 2.05vw, 2.2rem);
-  max-width: 700px;
-  margin-bottom: 8px;
-  line-height: 1.12;
+  font-size: clamp(1.15rem, 1.55vw, 1.6rem);
+  max-width: 760px;
+  margin-bottom: 6px;
+  line-height: 1.14;
 }
 
 .blog-detail-hero .page-lede {
-  font-size: .84rem;
-  line-height: 1.5;
-  max-width: 660px;
+  font-size: .76rem;
+  line-height: 1.45;
+  max-width: 680px;
 }
 
 .blog-page-wrap {

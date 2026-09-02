@@ -5,8 +5,9 @@ const crypto = require('crypto');
 const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = __dirname;
-const DATA_DIR = path.join(ROOT, 'data');
-const UPLOAD_DIR = path.join(ROOT, 'uploads', 'blogs');
+const RUNTIME_ROOT = process.env.VERCEL ? path.join('/tmp', 'acme-infotech-cms') : ROOT;
+const DATA_DIR = path.join(RUNTIME_ROOT, 'data');
+const UPLOAD_DIR = path.join(RUNTIME_ROOT, 'uploads', 'blogs');
 const DB_PATH = path.join(DATA_DIR, 'cms.sqlite');
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_TTL_MS = 1000 * 60 * 60 * 8;
@@ -577,6 +578,16 @@ function redirectWithCookie(res, location, sid) {
 }
 
 function serveStatic(req, res, pathname) {
+  if (pathname.startsWith('/uploads/blogs/')) {
+    const uploadName = path.basename(pathname);
+    const uploadFile = path.join(UPLOAD_DIR, uploadName);
+    if (!uploadFile.startsWith(UPLOAD_DIR)) return send(res, 403, 'Forbidden');
+    return fs.readFile(uploadFile, (err, data) => {
+      if (err) return send(res, 404, 'Not found');
+      send(res, 200, data, TYPES[path.extname(uploadFile)] || 'application/octet-stream');
+    });
+  }
+
   const cleanPath = pathname === '/' ? 'index.html' : pathname.replace(/^[/\\]+/, '');
   const safe = path.normalize(cleanPath).replace(/^(\.\.[/\\])+/, '');
   const file = path.join(ROOT, safe);

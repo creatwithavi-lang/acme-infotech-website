@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -74,7 +74,7 @@
       <li><a href="#products">Products</a></li>
       <li><a href="#pricing">Get Quote</a></li>
       <li><a href="#reviews">Reviews</a></li>
-      <li><a href="#blog">Blog</a></li>
+      <li><a href="/blog">Blog</a></li>
       <li><a href="#contact" class="nav-pill">Get Quote</a></li>
     </ul>
     <div class="ham" id="ham" onclick="toggleMob()">
@@ -89,7 +89,7 @@
       <a href="#pricing" onclick="toggleMob()">Get Quote</a>
       <a href="#gallery" onclick="toggleMob()">Photo Gallery</a>
       <a href="#reviews" onclick="toggleMob()">Reviews</a>
-      <a href="#blog" onclick="toggleMob()">Blog</a>
+      <a href="/blog" onclick="toggleMob()">Blog</a>
       <a href="#contact" onclick="toggleMob()">Contact / Quote</a>
     </div>
   </nav>
@@ -978,7 +978,16 @@
         <p style="color:var(--muted2);font-size:.95rem;margin-top:12px">Expert tips on CCTV, attendance machines, and
           business security for Surat businesses.</p>
       </div>
-      <div class="blog-grid">
+      <div class="blog-carousel">
+        <div class="blog-carousel-controls" aria-label="Blog carousel controls">
+          <button type="button" class="blog-car-btn" data-blog-prev aria-label="Previous blog">
+            <i data-lucide="chevron-left"></i>
+          </button>
+          <button type="button" class="blog-car-btn" data-blog-next aria-label="Next blog">
+            <i data-lucide="chevron-right"></i>
+          </button>
+        </div>
+      <div class="blog-grid" data-blog-carousel>
         <div class="blog-card reveal">
           <div class="blog-img"
             style="background: url('images/blog_cctv.png') center/cover;">
@@ -991,8 +1000,7 @@
             <div class="blog-meta"><span>May 2025</span><span>5 min read</span></div>
             <div class="blog-title">How Many CCTV Cameras Does Your Surat Business Need?</div>
             <div class="blog-exc">Camera count guide for shops, factories, offices, and warehouses in Surat — based on
-              area size and risk level.</div><a href="#article-1" class="blog-link"
-              onclick="openArticle(1);return false">Read Article →</a>
+              area size and risk level.</div><a href="/blog/cctv-camera-count-surat" class="blog-link">Read Article →</a>
           </div>
         </div>
         <div class="blog-card reveal reveal-delay-1">
@@ -1007,7 +1015,7 @@
             <div class="blog-meta"><span>Apr 2025</span><span>4 min read</span></div>
             <div class="blog-title">Fingerprint vs Face Recognition — Which Attendance Machine is Right for You?</div>
             <div class="blog-exc">Detailed comparison of biometric technologies for Surat textile mills, factories, and
-              offices.</div><a href="#article-2" class="blog-link" onclick="openArticle(2);return false">Read Article
+              offices.</div><a href="/blog/fingerprint-vs-face-recognition-attendance-machine" class="blog-link">Read Article
               →</a>
           </div>
         </div>
@@ -1023,7 +1031,7 @@
             <div class="blog-meta"><span>Mar 2025</span><span>6 min read</span></div>
             <div class="blog-title">Best Night Vision CCTV Cameras for Complete Security — 2025 Guide</div>
             <div class="blog-exc">ColorVu, IR, and Starlight sensors tested for India's weather — Hikvision, CP Plus,
-              Dahua compared.</div><a href="#article-3" class="blog-link" onclick="openArticle(3);return false">Read
+              Dahua compared.</div><a href="/blog/best-night-vision-cctv-camera-surat" class="blog-link">Read
               Article →</a>
           </div>
         </div>
@@ -1039,7 +1047,7 @@
             <div class="blog-meta"><span>Feb 2025</span><span>3 min read</span></div>
             <div class="blog-title">How to Watch Your CCTV Camera on Mobile from Anywhere</div>
             <div class="blog-exc">Step-by-step setup for Hik-Connect, DMSS, and CamView apps — works on Jio, Airtel, and
-              BSNL.</div><a href="#article-4" class="blog-link" onclick="openArticle(4);return false">Read Article →</a>
+              BSNL.</div><a href="/blog/watch-cctv-camera-on-mobile" class="blog-link">Read Article →</a>
           </div>
         </div>
         <div class="blog-card reveal reveal-delay-1">
@@ -1054,7 +1062,7 @@
             <div class="blog-meta"><span>Jan 2025</span><span>4 min read</span></div>
             <div class="blog-title">How Biometric Attendance Saves Surat Businesses Huge Time & Money</div>
             <div class="blog-exc">Real case study from a Surat textile factory — how eliminating buddy punching saves
-              big money.</div><a href="#article-5" class="blog-link" onclick="openArticle(5);return false">Read Article
+              big money.</div><a href="/blog/biometric-attendance-system-surat-savings" class="blog-link">Read Article
               →</a>
           </div>
         </div>
@@ -1070,10 +1078,11 @@
             <div class="blog-meta"><span>Dec 2024</span><span>5 min read</span></div>
             <div class="blog-title">Best CCTV Setup for Surat Homes, Bungalows & Societies</div>
             <div class="blog-exc">Home security camera guide — ideal placements for Vesu, Adajan, Pal, Althan, and
-              Katargam.</div><a href="#article-6" class="blog-link" onclick="openArticle(6);return false">Read Article
+              Katargam.</div><a href="/blog/home-cctv-camera-setup-surat" class="blog-link">Read Article
               →</a>
           </div>
         </div>
+      </div>
       </div>
 
       <!-- Full article text lives here in real HTML (not just inside the JS modal) so Google can actually crawl and rank it, and so it still works with JS disabled or for screen readers. The"Read Article" cards above open the same content in a quick-view popup for convenience. -->
@@ -1401,7 +1410,7 @@
               <li><a href="#pricing">Get Quote</a></li>
               <li><a href="#gallery">Photo Gallery</a></li>
               <li><a href="#reviews">Reviews</a></li>
-              <li><a href="#blog">Blog</a></li>
+              <li><a href="/blog">Blog</a></li>
               <li><a href="#contact">Contact</a></li>
               <li><a
                   href="https://www.justdial.com/Surat/Acme-Infotech-Security-System-Opposite-SBI-ATM-Katargam/0261PX261-X261-140723103645-Q5B8_BZDET"
@@ -1567,6 +1576,43 @@
         }
       }, 3500);
     }
+
+    /* ── HOMEPAGE BLOG LOOP CAROUSEL ── */
+    (function initBlogCarousel() {
+      const track = document.querySelector('[data-blog-carousel]');
+      if (!track) return;
+      const prev = document.querySelector('[data-blog-prev]');
+      const next = document.querySelector('[data-blog-next]');
+      const getGap = () => parseFloat(getComputedStyle(track).gap) || 24;
+      const getStep = () => {
+        const card = track.querySelector('.blog-card');
+        return card ? card.getBoundingClientRect().width + getGap() : track.clientWidth;
+      };
+      const isAtEnd = () => track.scrollLeft + track.clientWidth >= track.scrollWidth - getStep() / 2;
+      const go = direction => {
+        if (direction > 0 && isAtEnd()) {
+          track.scrollTo({ left: 0, behavior: 'smooth' });
+          return;
+        }
+        if (direction < 0 && track.scrollLeft <= 4) {
+          track.scrollTo({ left: track.scrollWidth, behavior: 'smooth' });
+          return;
+        }
+        track.scrollBy({ left: direction * getStep(), behavior: 'smooth' });
+      };
+      prev?.addEventListener('click', () => go(-1));
+      next?.addEventListener('click', () => go(1));
+      let timer = setInterval(() => go(1), 4200);
+      const pause = () => clearInterval(timer);
+      const resume = () => {
+        clearInterval(timer);
+        timer = setInterval(() => go(1), 4200);
+      };
+      track.addEventListener('mouseenter', pause);
+      track.addEventListener('mouseleave', resume);
+      track.addEventListener('touchstart', pause, { passive: true });
+      track.addEventListener('touchend', resume);
+    })();
 
     /* ── ACTIVE NAV ── */
     window.addEventListener('scroll', () => {

@@ -1,0 +1,14 @@
+{
+  "name": "acme-infotech-cms",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ACME Infotech CCTV website with SQLite admin blog CMS",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

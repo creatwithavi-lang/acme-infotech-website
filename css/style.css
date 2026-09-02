@@ -2326,9 +2326,10 @@ h2.section-h {
     min-height: 0;
   }
 
-  .article-content {
-    padding: 24px;
-  }
+.article-content {
+    padding: 10px;
+    border: 0px;
+}
 
   .article-cta {
     align-items: flex-start;

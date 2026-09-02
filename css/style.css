@@ -3335,6 +3335,7 @@ details[open] > summary::after {
   flex: 0 0 calc((100% - 48px) / 3);
   min-width: 0;
   scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
 
 @media (max-width: 1024px) {
@@ -3354,6 +3355,10 @@ details[open] > summary::after {
 
   #blog .blog-grid[data-blog-carousel] .blog-card {
     flex-basis: 100%;
+  }
+
+  #blog .blog-grid[data-blog-carousel] {
+    overflow-x: hidden;
   }
 }
 

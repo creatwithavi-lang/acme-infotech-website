@@ -5,6 +5,20 @@ const crypto = require('crypto');
 const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = __dirname;
+
+function loadLocalEnv() {
+  const envFile = path.join(ROOT, '.env.local');
+  if (!fs.existsSync(envFile)) return;
+  const allowed = new Set(['BLOB_READ_WRITE_TOKEN', 'SESSION_SECRET', 'ADMIN_EMAIL', 'ADMIN_PASSWORD']);
+  for (const line of fs.readFileSync(envFile, 'utf8').split(/\r?\n/)) {
+    const match = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());
+    if (!match || !allowed.has(match[1]) || process.env[match[1]]) continue;
+    process.env[match[1]] = match[2].replace(/^['"]|['"]$/g, '');
+  }
+}
+
+loadLocalEnv();
+
 const RUNTIME_ROOT = process.env.VERCEL ? path.join('/tmp', 'acme-infotech-cms') : ROOT;
 const DATA_DIR = path.join(RUNTIME_ROOT, 'data');
 const UPLOAD_DIR = path.join(RUNTIME_ROOT, 'uploads', 'blogs');
@@ -551,13 +565,36 @@ function latestBlogsJson(limit = 8) {
     title: b.title,
     slug: b.slug,
     excerpt: b.excerpt,
-    image: b.featured_image || '/images/blog_cctv.png',
+    image: b.featured_image && !String(b.featured_image).startsWith('data:') ? b.featured_image : '/images/blog_cctv.png',
     imageAlt: b.featured_image_alt || b.title,
     category: b.category_name || 'Security',
     date: formatDate(b.published_at),
     readMinutes: readTime(b.content),
     url: `/blog/${b.slug}`
   }));
+}
+
+async function latestBlogsPayload(limit = 8) {
+  const localBlogs = latestBlogsJson(limit);
+  if (process.env.VERCEL || process.env.USE_LOCAL_BLOG_DB === '1') return localBlogs;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+    const response = await fetch('https://www.acmeinfotechcctv.in/api/blogs/latest', {
+      headers: { accept: 'application/json' },
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    if (!response.ok) return localBlogs;
+    const data = await response.json();
+    if (!Array.isArray(data.blogs) || !data.blogs.length) return localBlogs;
+    return data.blogs.slice(0, limit).map(blog => ({
+      ...blog,
+      image: blog.image && !String(blog.image).startsWith('data:') ? blog.image : '/images/blog_cctv.png'
+    }));
+  } catch {
+    return localBlogs;
+  }
 }
 
 function renderDashboard(user) {
@@ -703,7 +740,7 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const pathname = decodeURIComponent(url.pathname).replace(/\/$/, '') || '/';
     if (req.method === 'GET' && pathname === '/api/blogs/latest') {
-      return send(res, 200, JSON.stringify({ blogs: latestBlogsJson(8) }), 'application/json; charset=utf-8', {
+      return send(res, 200, JSON.stringify({ blogs: await latestBlogsPayload(8) }), 'application/json; charset=utf-8', {
         'Cache-Control': 'public, max-age=0, must-revalidate'
       });
     }

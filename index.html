@@ -1583,6 +1583,27 @@
       if (!track) return;
       const prev = document.querySelector('[data-blog-prev]');
       const next = document.querySelector('[data-blog-next]');
+      const escapeText = value => String(value || '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+      }[ch]));
+      const renderBlogs = blogs => {
+        if (!Array.isArray(blogs) || !blogs.length) return;
+        track.innerHTML = blogs.map((blog, index) => `
+          <div class="blog-card reveal ${index % 3 === 1 ? 'reveal-delay-1' : index % 3 === 2 ? 'reveal-delay-2' : ''}">
+            <div class="blog-img blog-img-fit">
+              <img class="blog-thumb-img" src="${escapeText(blog.image)}" alt="${escapeText(blog.imageAlt || blog.title)}" loading="lazy">
+              <span class="blog-cat-badge">${escapeText(blog.category)}</span>
+            </div>
+            <div class="blog-body">
+              <div class="blog-meta"><span>${escapeText(blog.date)}</span><span>${Number(blog.readMinutes) || 1} min read</span></div>
+              <div class="blog-title">${escapeText(blog.title)}</div>
+              <div class="blog-exc">${escapeText(blog.excerpt)}</div>
+              <a href="${escapeText(blog.url)}" class="blog-link">Read Article →</a>
+            </div>
+          </div>
+        `).join('');
+        resetToLatest();
+      };
       const getGap = () => parseFloat(getComputedStyle(track).gap) || 24;
       const getStep = () => {
         const card = track.querySelector('.blog-card');
@@ -1607,6 +1628,9 @@
       window.addEventListener('load', resetToLatest);
       window.addEventListener('pageshow', resetToLatest);
       let timer = null;
+      let touchStartX = 0;
+      let touchStartLeft = 0;
+      let isTouching = false;
       const resume = () => {
         clearInterval(timer);
         if (!document.hidden) timer = setInterval(() => go(1), 4200);
@@ -1618,13 +1642,41 @@
       resume();
       track.addEventListener('mouseenter', pause);
       track.addEventListener('mouseleave', resume);
-      track.addEventListener('touchstart', pause, { passive: true });
-      track.addEventListener('touchend', resume, { passive: true });
-      track.addEventListener('touchcancel', resume, { passive: true });
+      track.addEventListener('touchstart', event => {
+        pause();
+        isTouching = true;
+        touchStartX = event.touches[0].clientX;
+        touchStartLeft = track.scrollLeft;
+      }, { passive: true });
+      track.addEventListener('touchmove', event => {
+        if (!isTouching) return;
+        const delta = event.touches[0].clientX - touchStartX;
+        if (Math.abs(delta) > 8) event.preventDefault();
+        track.scrollLeft = touchStartLeft - delta;
+      }, { passive: false });
+      track.addEventListener('touchend', event => {
+        if (!isTouching) return resume();
+        isTouching = false;
+        const delta = (event.changedTouches[0]?.clientX || touchStartX) - touchStartX;
+        const step = getStep();
+        let target = touchStartLeft;
+        if (Math.abs(delta) > 36) target = touchStartLeft + (delta < 0 ? step : -step);
+        target = Math.max(0, Math.min(target, track.scrollWidth - track.clientWidth));
+        track.scrollTo({ left: Math.round(target / step) * step, behavior: 'smooth' });
+        resume();
+      }, { passive: true });
+      track.addEventListener('touchcancel', () => {
+        isTouching = false;
+        resume();
+      }, { passive: true });
       track.addEventListener('pointerdown', pause);
       track.addEventListener('pointerup', resume);
       track.addEventListener('pointercancel', resume);
       document.addEventListener('visibilitychange', () => document.hidden ? pause() : resume());
+      fetch('/api/blogs/latest')
+        .then(response => response.ok ? response.json() : null)
+        .then(data => renderBlogs(data?.blogs))
+        .catch(() => {});
     })();
 
     /* ── ACTIVE NAV ── */

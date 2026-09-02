@@ -545,6 +545,21 @@ function readTime(html) {
   return Math.max(1, Math.ceil(words / 180));
 }
 
+function latestBlogsJson(limit = 8) {
+  const blogs = db.prepare(`SELECT blogs.*, categories.name AS category_name FROM blogs LEFT JOIN categories ON categories.id = blogs.category_id WHERE status = 'published' OR (status = 'scheduled' AND published_at IS NOT NULL AND datetime(published_at) <= datetime(?)) ORDER BY datetime(published_at) DESC, id DESC LIMIT ?`).all(nowIso(), limit);
+  return blogs.map(b => ({
+    title: b.title,
+    slug: b.slug,
+    excerpt: b.excerpt,
+    image: b.featured_image || '/images/blog_cctv.png',
+    imageAlt: b.featured_image_alt || b.title,
+    category: b.category_name || 'Security',
+    date: formatDate(b.published_at),
+    readMinutes: readTime(b.content),
+    url: `/blog/${b.slug}`
+  }));
+}
+
 function renderDashboard(user) {
   const stats = db.prepare(`SELECT COUNT(*) total, SUM(status='published') published, SUM(status='draft') draft, SUM(status='scheduled') scheduled FROM blogs`).get();
   const cats = db.prepare('SELECT COUNT(*) total FROM categories').get().total;
@@ -687,6 +702,11 @@ const server = http.createServer(async (req, res) => {
     await ensureDbReady();
     const url = new URL(req.url, `http://${req.headers.host}`);
     const pathname = decodeURIComponent(url.pathname).replace(/\/$/, '') || '/';
+    if (req.method === 'GET' && pathname === '/api/blogs/latest') {
+      return send(res, 200, JSON.stringify({ blogs: latestBlogsJson(8) }), 'application/json; charset=utf-8', {
+        'Cache-Control': 'public, max-age=0, must-revalidate'
+      });
+    }
     if (req.method === 'POST') return handleAdminPost(req, res, pathname);
     if (pathname === '/admin/login') return send(res, 200, loginPage());
     if (pathname === '/admin') {

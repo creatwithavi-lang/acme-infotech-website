@@ -33,6 +33,7 @@
       "continue": true
     },
     { "src": "/admin/(admin\\.(?:css|js))", "dest": "/admin/$1" },
+    { "src": "/api(?:/(.*))?", "dest": "/server.js" },
     { "src": "/admin(?:/(.*))?", "dest": "/server.js" },
     { "src": "/blog(?:/(.*))?", "dest": "/server.js" },
     { "src": "/uploads(?:/(.*))?", "dest": "/server.js" },

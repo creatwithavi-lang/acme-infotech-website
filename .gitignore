@@ -9,3 +9,5 @@ split.ps1
 split.py
 
 .vercel
+
+.env*.local

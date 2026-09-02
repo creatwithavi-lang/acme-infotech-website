@@ -12,6 +12,8 @@ const DB_PATH = path.join(DATA_DIR, 'cms.sqlite');
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_TTL_MS = 1000 * 60 * 60 * 8;
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.ADMIN_PASSWORD || 'change-this-session-secret';
+const DB_BLOB_PATH = 'cms/cms.sqlite';
+const USE_BLOB_DB = Boolean(process.env.BLOB_READ_WRITE_TOKEN || (process.env.BLOB_STORE_ID && process.env.VERCEL_OIDC_TOKEN));
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 const MIME_EXT = {
   'image/jpeg': '.jpg',
@@ -38,56 +40,61 @@ const TYPES = {
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-const db = new DatabaseSync(DB_PATH);
-db.exec(`
-  PRAGMA journal_mode = WAL;
-  PRAGMA foreign_keys = ON;
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE,
-    password TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'admin',
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE TABLE IF NOT EXISTS categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    slug TEXT NOT NULL UNIQUE,
-    description TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE TABLE IF NOT EXISTS blogs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    slug TEXT NOT NULL UNIQUE,
-    excerpt TEXT NOT NULL,
-    content TEXT NOT NULL,
-    featured_image TEXT,
-    featured_image_alt TEXT,
-    category_id INTEGER,
-    author TEXT NOT NULL,
-    status TEXT NOT NULL CHECK(status IN ('draft','published','scheduled')) DEFAULT 'draft',
-    published_at TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    seo_title TEXT,
-    meta_description TEXT,
-    focus_keyword TEXT,
-    canonical_url TEXT,
-    og_image TEXT,
-    og_image_alt TEXT,
-    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
-  );
-  CREATE TABLE IF NOT EXISTS sessions (
-    id TEXT PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    csrf_token TEXT NOT NULL,
-    expires_at INTEGER NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-  );
-`);
+let db;
+let dbReadyPromise;
+
+function openDatabase() {
+  db = new DatabaseSync(DB_PATH);
+  db.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      password TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'admin',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      slug TEXT NOT NULL UNIQUE,
+      description TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS blogs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      excerpt TEXT NOT NULL,
+      content TEXT NOT NULL,
+      featured_image TEXT,
+      featured_image_alt TEXT,
+      category_id INTEGER,
+      author TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('draft','published','scheduled')) DEFAULT 'draft',
+      published_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      seo_title TEXT,
+      meta_description TEXT,
+      focus_keyword TEXT,
+      canonical_url TEXT,
+      og_image TEXT,
+      og_image_alt TEXT,
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+    );
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      csrf_token TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `);
+}
 
 function migrateScheduledStatus() {
   const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'blogs'").get();
@@ -123,8 +130,6 @@ function migrateScheduledStatus() {
     DROP TABLE blogs_old;
   `);
 }
-
-migrateScheduledStatus();
 
 function nowIso() {
   return new Date().toISOString();
@@ -267,8 +272,54 @@ function seedCategoriesAndBlogs() {
   ));
 }
 
-seedAdmin();
-seedCategoriesAndBlogs();
+async function streamToBuffer(stream) {
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  return Buffer.concat(chunks);
+}
+
+async function restoreDbFromBlob() {
+  if (!USE_BLOB_DB) return;
+  try {
+    const { get } = await import('@vercel/blob');
+    const stored = await get(DB_BLOB_PATH, { access: 'private', useCache: false });
+    if (!stored) return;
+    fs.writeFileSync(DB_PATH, await streamToBuffer(stored.stream));
+  } catch (e) {
+    if (!String(e?.message || '').toLowerCase().includes('not found')) {
+      console.error('Could not restore CMS database from Blob:', e);
+    }
+  }
+}
+
+async function persistDbToBlob() {
+  if (!USE_BLOB_DB) return;
+  try {
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    const { put } = await import('@vercel/blob');
+    await put(DB_BLOB_PATH, fs.readFileSync(DB_PATH), {
+      access: 'private',
+      allowOverwrite: true,
+      contentType: 'application/vnd.sqlite3',
+      cacheControlMaxAge: 60
+    });
+  } catch (e) {
+    console.error('Could not persist CMS database to Blob:', e);
+  }
+}
+
+async function ensureDbReady() {
+  if (dbReadyPromise) return dbReadyPromise;
+  dbReadyPromise = (async () => {
+    await restoreDbFromBlob();
+    openDatabase();
+    migrateScheduledStatus();
+    seedAdmin();
+    seedCategoriesAndBlogs();
+    await persistDbToBlob();
+  })();
+  return dbReadyPromise;
+}
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({
@@ -433,6 +484,9 @@ function saveImage(file) {
   if (!file || !file.filename || file.buffer.length === 0) return '';
   if (!MIME_EXT[file.mime]) throw new Error('Only JPG, PNG, WEBP and GIF images are allowed.');
   if (file.buffer.length > MAX_IMAGE_BYTES) throw new Error('Image must be smaller than 3MB.');
+  if (process.env.VERCEL) {
+    return `data:${file.mime};base64,${file.buffer.toString('base64')}`;
+  }
   const filename = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${MIME_EXT[file.mime]}`;
   fs.writeFileSync(path.join(UPLOAD_DIR, filename), file.buffer);
   return `/uploads/blogs/${filename}`;
@@ -566,21 +620,25 @@ async function handleAdminPost(req, res, pathname) {
     } else {
       db.prepare(`INSERT INTO blogs (title,slug,excerpt,content,featured_image,featured_image_alt,category_id,author,status,published_at,updated_at,seo_title,meta_description,focus_keyword,canonical_url,og_image,og_image_alt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(...values);
     }
+    await persistDbToBlob();
     return send(res, 200, renderBlogs(user));
   }
   if (/^\/admin\/blogs\/\d+\/toggle$/.test(pathname)) {
     const id = Number(pathname.match(/\d+/)[0]);
     const b = db.prepare('SELECT * FROM blogs WHERE id = ?').get(id);
     if (b) db.prepare(`UPDATE blogs SET status = ?, published_at = ?, updated_at = ? WHERE id = ?`).run(b.status === 'published' ? 'draft' : 'published', b.status === 'published' ? b.published_at : nowIso(), nowIso(), id);
+    await persistDbToBlob();
     return send(res, 200, renderBlogs(user));
   }
   if (/^\/admin\/blogs\/\d+\/delete$/.test(pathname)) {
     db.prepare('DELETE FROM blogs WHERE id = ?').run(Number(pathname.match(/\d+/)[0]));
+    await persistDbToBlob();
     return send(res, 200, renderBlogs(user));
   }
   if (pathname === '/admin/categories') {
     const slug = slugify(form.slug || form.name);
     db.prepare('INSERT OR IGNORE INTO categories (name,slug,description) VALUES (?,?,?)').run(form.name, slug, form.description || '');
+    await persistDbToBlob();
     return send(res, 200, renderCategories(user));
   }
   if (pathname === '/admin/upload') {
@@ -626,6 +684,7 @@ function serveStatic(req, res, pathname) {
 
 const server = http.createServer(async (req, res) => {
   try {
+    await ensureDbReady();
     const url = new URL(req.url, `http://${req.headers.host}`);
     const pathname = decodeURIComponent(url.pathname).replace(/\/$/, '') || '/';
     if (req.method === 'POST') return handleAdminPost(req, res, pathname);

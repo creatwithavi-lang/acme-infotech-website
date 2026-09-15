@@ -280,6 +280,7 @@ async function streamToBuffer(stream) {
   return Buffer.concat(chunks);
 }
 
+let dbReadyPromise = null;
 async function ensureDbReady() {
   if (dbReadyPromise) return dbReadyPromise;
   dbReadyPromise = (async () => {
@@ -555,8 +556,8 @@ async function latestBlogsPayload(limit = 8) {
 }
 
 async function renderDashboard(user) {
-  const stats = await db.prepare(`SELECT COUNT(*) total, SUM(status='published') published, SUM(status='draft') draft, SUM(status='scheduled') scheduled FROM blogs`).get();
-  const cats = await (await db.prepare('SELECT COUNT(*) total FROM categories').get()).total;
+  const stats = (await db.prepare(`SELECT COUNT(*) total, SUM((status='published')::int) published, SUM((status='draft')::int) draft, SUM((status='scheduled')::int) scheduled FROM blogs`).get()) || {};
+  const cats = Number((await db.prepare('SELECT COUNT(*) total FROM categories').get())?.total || 0);
   const recent = await db.prepare(`SELECT blogs.*, categories.name AS category_name FROM blogs LEFT JOIN categories ON categories.id = blogs.category_id ORDER BY updated_at DESC LIMIT 6`).all();
   return adminLayout('Dashboard', user, `<section class="page-head"><div><h1>Dashboard</h1><p>Manage ACME Infotech CCTV blogs, SEO and categories.</p></div><a class="btn primary" href="/admin/blogs/new">Add New Blog</a></section><section class="stats"><div><strong>${stats.total || 0}</strong><span>Total Blogs</span></div><div><strong>${stats.published || 0}</strong><span>Published Blogs</span></div><div><strong>${stats.scheduled || 0}</strong><span>Scheduled Blogs</span></div><div><strong>${stats.draft || 0}</strong><span>Draft Blogs</span></div><div><strong>${cats || 0}</strong><span>Categories</span></div></section><section class="panel"><div class="panel-head"><h2>Recent Blogs</h2><a href="/admin/blogs">View all</a></div><table class="admin-table"><thead><tr><th>Title</th><th>Category</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>${recent.map(b => `<tr><td>${escapeHtml(b.title)}</td><td>${escapeHtml(b.category_name || '-')}</td><td><span class="status ${b.status}">${b.status}</span></td><td>${formatDate(b.updated_at)}</td><td><a href="/admin/blogs/${b.id}/edit">Edit</a></td></tr>`).join('')}</tbody></table></section>`);
 }

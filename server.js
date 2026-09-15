@@ -433,7 +433,7 @@ function loginPage(error = '') {
 }
 
 async function categoryOptions(selected) {
-  return await db.prepare('SELECT * FROM categories ORDER BY name').all().map(c => `<option value="${c.id}" ${String(c.id) === String(selected || '') ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+  return (await db.prepare('SELECT * FROM categories ORDER BY name').all()).map(c => `<option value="${c.id}" ${String(c.id) === String(selected || '') ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
 }
 
 async function blogForm(user, blog = {}) {
@@ -630,17 +630,17 @@ async function handleAdminPost(req, res, pathname) {
     } else {
       await db.prepare(`INSERT INTO blogs (title,slug,excerpt,content,featured_image,featured_image_alt,category_id,author,status,published_at,updated_at,seo_title,meta_description,focus_keyword,canonical_url,og_image,og_image_alt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(...values);
     }
-        return send(res, 200, await renderBlogs(user));
+        return send(res, 200, await renderBlogs(user, req.url));
   }
   if (/^\/admin\/blogs\/\d+\/toggle$/.test(pathname)) {
     const id = Number(pathname.match(/\d+/)[0]);
     const b = await db.prepare('SELECT * FROM blogs WHERE id = ?').get(id);
     if (b) await db.prepare(`UPDATE blogs SET status = ?, published_at = ?, updated_at = ? WHERE id = ?`).run(b.status === 'published' ? 'draft' : 'published', b.status === 'published' ? b.published_at : nowIso(), nowIso(), id);
-        return send(res, 200, renderBlogs(user));
+        return send(res, 200, await renderBlogs(user, req.url));
   }
   if (/^\/admin\/blogs\/\d+\/delete$/.test(pathname)) {
     await db.prepare('DELETE FROM blogs WHERE id = ?').run(Number(pathname.match(/\d+/)[0]));
-        return send(res, 200, renderBlogs(user));
+        return send(res, 200, await renderBlogs(user, req.url));
   }
   if (pathname === '/admin/categories') {
     const slug = slugify(form.slug || form.name);

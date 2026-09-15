@@ -2,7 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { DatabaseSync } = require('node:sqlite');
+const { Pool } = require('pg');
 
 const ROOT = __dirname;
 
@@ -22,12 +22,9 @@ loadLocalEnv();
 const RUNTIME_ROOT = process.env.VERCEL ? path.join('/tmp', 'acme-infotech-cms') : ROOT;
 const DATA_DIR = path.join(RUNTIME_ROOT, 'data');
 const UPLOAD_DIR = path.join(RUNTIME_ROOT, 'uploads', 'blogs');
-const DB_PATH = path.join(DATA_DIR, 'cms.sqlite');
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_TTL_MS = 1000 * 60 * 60 * 8;
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.ADMIN_PASSWORD || 'change-this-session-secret';
-const DB_BLOB_PATH = 'cms/cms.sqlite';
-const USE_BLOB_DB = Boolean(process.env.BLOB_READ_WRITE_TOKEN || (process.env.BLOB_STORE_ID && process.env.VERCEL_OIDC_TOKEN));
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 const MIME_EXT = {
   'image/jpeg': '.jpg',
@@ -54,97 +51,87 @@ const TYPES = {
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-let db;
-let dbReadyPromise;
 
-function openDatabase() {
-  db = new DatabaseSync(DB_PATH);
-  db.exec(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA foreign_keys = ON;
+const pool = new Pool({
+  connectionString: process.env.POSTGRES_URL || process.env.DATABASE_URL,
+});
+
+const db = {
+  prepare: (queryStr) => {
+    let pgQuery = queryStr;
+    let index = 1;
+    while (pgQuery.includes('?')) {
+      pgQuery = pgQuery.replace('?', '$' + index);
+      index++;
+    }
+    return {
+      get: async (...args) => {
+        const { rows } = await pool.query(pgQuery, args);
+        return rows[0] || null;
+      },
+      all: async (...args) => {
+        const { rows } = await pool.query(pgQuery, args);
+        return rows;
+      },
+      run: async (...args) => {
+        await pool.query(pgQuery, args);
+        return true;
+      }
+    };
+  },
+  exec: async (queryStr) => {
+    await pool.query(queryStr);
+  }
+};
+
+async function openDatabase() {
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      email VARCHAR(255) NOT NULL UNIQUE,
       password TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'admin',
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      role VARCHAR(50) NOT NULL DEFAULT 'admin',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS categories (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
-      slug TEXT NOT NULL UNIQUE,
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL UNIQUE,
+      slug VARCHAR(255) NOT NULL UNIQUE,
       description TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS blogs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      slug TEXT NOT NULL UNIQUE,
+      id SERIAL PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      slug VARCHAR(255) NOT NULL UNIQUE,
       excerpt TEXT NOT NULL,
       content TEXT NOT NULL,
       featured_image TEXT,
       featured_image_alt TEXT,
-      category_id INTEGER,
-      author TEXT NOT NULL,
-      status TEXT NOT NULL CHECK(status IN ('draft','published','scheduled')) DEFAULT 'draft',
-      published_at TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      seo_title TEXT,
+      category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+      author VARCHAR(255) NOT NULL,
+      status VARCHAR(50) NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','published','scheduled')),
+      published_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      seo_title VARCHAR(255),
       meta_description TEXT,
-      focus_keyword TEXT,
+      focus_keyword VARCHAR(255),
       canonical_url TEXT,
       og_image TEXT,
-      og_image_alt TEXT,
-      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+      og_image_alt TEXT
     );
     CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      user_id INTEGER NOT NULL,
-      csrf_token TEXT NOT NULL,
-      expires_at INTEGER NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      id VARCHAR(255) PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      csrf_token VARCHAR(255) NOT NULL,
+      expires_at BIGINT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
 }
-
-function migrateScheduledStatus() {
-  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'blogs'").get();
-  if (!row || row.sql.includes("'scheduled'")) return;
-  db.exec(`
-    ALTER TABLE blogs RENAME TO blogs_old;
-    CREATE TABLE blogs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      slug TEXT NOT NULL UNIQUE,
-      excerpt TEXT NOT NULL,
-      content TEXT NOT NULL,
-      featured_image TEXT,
-      featured_image_alt TEXT,
-      category_id INTEGER,
-      author TEXT NOT NULL,
-      status TEXT NOT NULL CHECK(status IN ('draft','published','scheduled')) DEFAULT 'draft',
-      published_at TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      seo_title TEXT,
-      meta_description TEXT,
-      focus_keyword TEXT,
-      canonical_url TEXT,
-      og_image TEXT,
-      og_image_alt TEXT,
-      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
-    );
-    INSERT INTO blogs
-    (id,title,slug,excerpt,content,featured_image,featured_image_alt,category_id,author,status,published_at,created_at,updated_at,seo_title,meta_description,focus_keyword,canonical_url,og_image,og_image_alt)
-    SELECT id,title,slug,excerpt,content,featured_image,featured_image_alt,category_id,author,status,published_at,created_at,updated_at,seo_title,meta_description,focus_keyword,canonical_url,og_image,og_image_alt
-    FROM blogs_old;
-    DROP TABLE blogs_old;
-  `);
-}
-
+async function migrateScheduledStatus() {}
 function nowIso() {
   return new Date().toISOString();
 }
@@ -167,13 +154,13 @@ function verifyPassword(password, stored) {
   return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(actual, 'hex'));
 }
 
-function seedAdmin() {
-  const count = db.prepare('SELECT COUNT(*) AS total FROM users').get().total;
-  if (count) return;
+async function seedAdmin() {
+  const countRow = await db.prepare('SELECT COUNT(*) AS total FROM users').get();
+  const count = countRow ? Number(countRow.total) : 0;
+  if (count > 0) return;
   const email = process.env.ADMIN_EMAIL || 'admin@acme.local';
   const password = process.env.ADMIN_PASSWORD || 'ChangeMe@12345';
-  db.prepare('INSERT INTO users (name,email,password,role) VALUES (?,?,?,?)')
-    .run('ACME Admin', email.toLowerCase(), hashPassword(password), 'admin');
+  await db.prepare('INSERT INTO users (name,email,password,role) VALUES (?,?,?,?)').run('ACME Admin', email.toLowerCase(), hashPassword(password), 'admin');
   console.log(`Admin created: ${email}`);
   if (!process.env.ADMIN_PASSWORD) console.log('Default password: ChangeMe@12345');
 }
@@ -188,17 +175,17 @@ function slugify(value) {
     .slice(0, 90) || crypto.randomBytes(4).toString('hex');
 }
 
-function ensureUniqueSlug(slug, id = 0) {
+async function ensureUniqueSlug(slug, id = 0) {
   let base = slugify(slug);
   let candidate = base;
   let i = 2;
-  while (db.prepare('SELECT id FROM blogs WHERE slug = ? AND id != ?').get(candidate, id)) {
+  while (await db.prepare('SELECT id FROM blogs WHERE slug = ? AND id != ?').get(candidate, id)) {
     candidate = `${base}-${i++}`;
   }
   return candidate;
 }
 
-function seedCategoriesAndBlogs() {
+async function seedCategoriesAndBlogs() {
   const categories = [
     ['CCTV Tips', 'cctv-tips', 'CCTV planning, placement and installation advice.'],
     ['Attendance', 'attendance', 'Biometric attendance machine guides.'],
@@ -207,11 +194,12 @@ function seedCategoriesAndBlogs() {
     ['Business Tips', 'business-tips', 'Security advice for businesses.'],
     ['Home Security', 'home-security', 'Home and society CCTV guidance.']
   ];
-  const catStmt = db.prepare('INSERT OR IGNORE INTO categories (name,slug,description) VALUES (?,?,?)');
-  categories.forEach(c => catStmt.run(...c));
-  if (db.prepare('SELECT COUNT(*) AS total FROM blogs').get().total) return;
-  const getCat = db.prepare('SELECT id FROM categories WHERE slug = ?');
-  const insert = db.prepare(`
+  const catStmt = await db.prepare('INSERT INTO categories (name,slug,description) VALUES (?,?,?) ON CONFLICT (slug) DO NOTHING');
+  for (const c of categories) await catStmt.run(...c);
+  const blogCount = await db.prepare('SELECT COUNT(*) AS total FROM blogs').get();
+  if (blogCount && Number(blogCount.total) > 0) return;
+  const getCat = await db.prepare('SELECT id FROM categories WHERE slug = ?');
+  const insert = await db.prepare(`
     INSERT INTO blogs
     (title, slug, excerpt, content, featured_image, featured_image_alt, category_id, author, status, published_at,
      seo_title, meta_description, focus_keyword, canonical_url, og_image, og_image_alt)
@@ -279,11 +267,11 @@ function seedCategoriesAndBlogs() {
       content: '<p>A home CCTV camera setup Surat families can depend on should cover entry points, parking, staircases, gates and daily movement without invading privacy.</p><h2>Best camera points</h2><ul><li>Main gate and visitor entry.</li><li>Parking area and vehicle approach.</li><li>Back door or side passage.</li><li>Terrace access and boundary corners.</li></ul>'
     }
   ];
-  rows.forEach(b => insert.run(
-    b.title, b.slug, b.excerpt, b.content, b.image, b.title, getCat.get(b.category).id, 'Acme Infotech Security System',
+  for (const b of rows) await insert.run(
+    b.title, b.slug, b.excerpt, b.content, b.image, b.title, (await getCat.get(b.category)).id, 'Acme Infotech Security System',
     'published', b.date, b.title, b.excerpt, b.focus, `https://www.acmeinfotechsecuritysystem.com/blog/${b.slug}`,
     b.image, b.title
-  ));
+  );
 }
 
 async function streamToBuffer(stream) {
@@ -292,45 +280,13 @@ async function streamToBuffer(stream) {
   return Buffer.concat(chunks);
 }
 
-async function restoreDbFromBlob() {
-  if (!USE_BLOB_DB) return;
-  try {
-    const { get } = await import('@vercel/blob');
-    const stored = await get(DB_BLOB_PATH, { access: 'private', useCache: false });
-    if (!stored) return;
-    fs.writeFileSync(DB_PATH, await streamToBuffer(stored.stream));
-  } catch (e) {
-    if (!String(e?.message || '').toLowerCase().includes('not found')) {
-      console.error('Could not restore CMS database from Blob:', e);
-    }
-  }
-}
-
-async function persistDbToBlob() {
-  if (!USE_BLOB_DB) return;
-  try {
-    db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
-    const { put } = await import('@vercel/blob');
-    await put(DB_BLOB_PATH, fs.readFileSync(DB_PATH), {
-      access: 'private',
-      allowOverwrite: true,
-      contentType: 'application/vnd.sqlite3',
-      cacheControlMaxAge: 60
-    });
-  } catch (e) {
-    console.error('Could not persist CMS database to Blob:', e);
-  }
-}
-
 async function ensureDbReady() {
   if (dbReadyPromise) return dbReadyPromise;
   dbReadyPromise = (async () => {
-    await restoreDbFromBlob();
-    openDatabase();
-    migrateScheduledStatus();
-    seedAdmin();
-    seedCategoriesAndBlogs();
-    await persistDbToBlob();
+    await openDatabase();
+    await migrateScheduledStatus();
+    await seedAdmin();
+    await seedCategoriesAndBlogs();
   })();
   return dbReadyPromise;
 }
@@ -445,16 +401,16 @@ function parseMultipart(buffer, contentType) {
   return { fields, files };
 }
 
-function currentUser(req) {
+async function currentUser(req) {
   const session = verifySessionCookie(parseCookies(req).sid);
   if (!session) return null;
-  const admin = db.prepare('SELECT id, name, email, role FROM users WHERE email = ?').get(String(session.email || '').toLowerCase());
+  const admin = await db.prepare('SELECT id, name, email, role FROM users WHERE email = ?').get(String(session.email || '').toLowerCase());
   if (!admin || admin.role !== 'admin') return null;
   return { ...admin, csrf_token: session.csrf_token, expires_at: session.expires_at };
 }
 
-function requireAdmin(req, res) {
-  const user = currentUser(req);
+async function requireAdmin(req, res) {
+  const user = await currentUser(req);
   if (!user || user.role !== 'admin') {
     redirect(res, '/admin/login');
     return null;
@@ -462,7 +418,7 @@ function requireAdmin(req, res) {
   return user;
 }
 
-function checkCsrf(req, form) {
+async function checkCsrf(req, form) {
   const user = currentUser(req);
   return user && form.csrf === user.csrf_token;
 }
@@ -475,15 +431,15 @@ function loginPage(error = '') {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Admin Login | ACME Infotech CCTV</title><link rel="stylesheet" href="/admin/admin.css"></head><body class="login-body"><main class="login-card"><div class="login-mark">AI</div><h1>Admin Login</h1><p>Secure blog management for ACME Infotech CCTV.</p>${error ? `<div class="alert">${escapeHtml(error)}</div>` : ''}<form method="post" action="/admin/login"><label>Email / Username<input name="email" type="email" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="btn primary full" type="submit">Login</button></form></main></body></html>`;
 }
 
-function categoryOptions(selected) {
-  return db.prepare('SELECT * FROM categories ORDER BY name').all().map(c => `<option value="${c.id}" ${String(c.id) === String(selected || '') ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+async function categoryOptions(selected) {
+  return await db.prepare('SELECT * FROM categories ORDER BY name').all().map(c => `<option value="${c.id}" ${String(c.id) === String(selected || '') ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
 }
 
-function blogForm(user, blog = {}) {
+async function blogForm(user, blog = {}) {
   const isEdit = Boolean(blog.id);
   const action = isEdit ? `/admin/blogs/${blog.id}/edit` : '/admin/blogs/new';
   const title = isEdit ? 'Edit Blog' : 'Add New Blog';
-  return adminLayout(title, user, `<section class="page-head"><div><h1>${title}</h1><p>Create SEO-ready public blog posts with images, categories and rich content.</p></div><a class="btn ghost" href="/admin/blogs">Back</a></section><form class="editor-form" method="post" action="${action}" enctype="multipart/form-data"><input type="hidden" name="csrf" value="${escapeHtml(user.csrf_token)}"><div class="form-grid"><label>Blog Title<input name="title" id="titleInput" required value="${escapeHtml(blog.title || '')}"></label><label>URL Slug<input name="slug" id="slugInput" required value="${escapeHtml(blog.slug || '')}"></label><label class="wide">Short Description / Excerpt<textarea name="excerpt" rows="3" required>${escapeHtml(blog.excerpt || '')}</textarea></label><label>Featured Image<input name="featured_image" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><label>Featured Image Alt Text<input name="featured_image_alt" value="${escapeHtml(blog.featured_image_alt || '')}"></label><label>Blog Category<select name="category_id" required>${categoryOptions(blog.category_id)}</select></label><label>Author<input name="author" required value="${escapeHtml(blog.author || 'Acme Infotech Security System')}"></label><label>Publish / Schedule Date<input name="published_at" type="datetime-local" value="${escapeHtml(toLocalInput(blog.published_at))}"><small>Scheduled blog aa date/time sudhi public website par nahi dekhay.</small></label><label>Status<select name="status"><option value="draft" ${blog.status !== 'published' && blog.status !== 'scheduled' ? 'selected' : ''}>Draft</option><option value="scheduled" ${blog.status === 'scheduled' ? 'selected' : ''}>Scheduled</option><option value="published" ${blog.status === 'published' ? 'selected' : ''}>Published</option></select></label><label>SEO Title<input name="seo_title" value="${escapeHtml(blog.seo_title || '')}"></label><label class="wide">Meta Description<textarea name="meta_description" rows="3">${escapeHtml(blog.meta_description || '')}</textarea></label><label>Focus Keyword<input name="focus_keyword" value="${escapeHtml(blog.focus_keyword || '')}"></label><label>Canonical URL<input name="canonical_url" value="${escapeHtml(blog.canonical_url || '')}"></label><label>Open Graph Image<input name="og_image_file" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><label>OG Image Alt Text<input name="og_image_alt" value="${escapeHtml(blog.og_image_alt || '')}"></label></div><section class="editor-box"><div class="toolbar"><button type="button" data-cmd="formatBlock" data-value="h1">H1</button><button type="button" data-cmd="formatBlock" data-value="h2">H2</button><button type="button" data-cmd="formatBlock" data-value="h3">H3</button><button type="button" data-cmd="bold">B</button><button type="button" data-cmd="italic">I</button><button type="button" data-cmd="insertUnorderedList">List</button><button type="button" data-cmd="insertOrderedList">1. List</button><button type="button" data-action="link">Link</button><button type="button" data-action="quote">Quote</button><button type="button" data-action="table">Table</button><button type="button" data-action="youtube">YouTube</button><button type="button" data-action="image">Image</button><button type="button" data-action="code">HTML</button></div><input id="editorImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden><div id="editor" class="rich-editor" contenteditable="true">${sanitizeHtml(blog.content || '<p>Write your blog content here...</p>')}</div><textarea name="content" id="contentInput" hidden></textarea></section><div class="form-actions"><button class="btn primary" type="submit">${isEdit ? 'Update Blog' : 'Save Blog'}</button><a class="btn ghost" href="/admin/blogs">Cancel</a></div></form>`);
+  return adminLayout(title, user, `<section class="page-head"><div><h1>${title}</h1><p>Create SEO-ready public blog posts with images, categories and rich content.</p></div><a class="btn ghost" href="/admin/blogs">Back</a></section><form class="editor-form" method="post" action="${action}" enctype="multipart/form-data"><input type="hidden" name="csrf" value="${escapeHtml(user.csrf_token)}"><div class="form-grid"><label>Blog Title<input name="title" id="titleInput" required value="${escapeHtml(blog.title || '')}"></label><label>URL Slug<input name="slug" id="slugInput" required value="${escapeHtml(blog.slug || '')}"></label><label class="wide">Short Description / Excerpt<textarea name="excerpt" rows="3" required>${escapeHtml(blog.excerpt || '')}</textarea></label><label>Featured Image<input name="featured_image" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><label>Featured Image Alt Text<input name="featured_image_alt" value="${escapeHtml(blog.featured_image_alt || '')}"></label><label>Blog Category<select name="category_id" required>${await categoryOptions(blog.category_id)}</select></label><label>Author<input name="author" required value="${escapeHtml(blog.author || 'Acme Infotech Security System')}"></label><label>Publish / Schedule Date<input name="published_at" type="datetime-local" value="${escapeHtml(toLocalInput(blog.published_at))}"><small>Scheduled blog aa date/time sudhi public website par nahi dekhay.</small></label><label>Status<select name="status"><option value="draft" ${blog.status !== 'published' && blog.status !== 'scheduled' ? 'selected' : ''}>Draft</option><option value="scheduled" ${blog.status === 'scheduled' ? 'selected' : ''}>Scheduled</option><option value="published" ${blog.status === 'published' ? 'selected' : ''}>Published</option></select></label><label>SEO Title<input name="seo_title" value="${escapeHtml(blog.seo_title || '')}"></label><label class="wide">Meta Description<textarea name="meta_description" rows="3">${escapeHtml(blog.meta_description || '')}</textarea></label><label>Focus Keyword<input name="focus_keyword" value="${escapeHtml(blog.focus_keyword || '')}"></label><label>Canonical URL<input name="canonical_url" value="${escapeHtml(blog.canonical_url || '')}"></label><label>Open Graph Image<input name="og_image_file" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><label>OG Image Alt Text<input name="og_image_alt" value="${escapeHtml(blog.og_image_alt || '')}"></label></div><section class="editor-box"><div class="toolbar"><button type="button" data-cmd="formatBlock" data-value="h1">H1</button><button type="button" data-cmd="formatBlock" data-value="h2">H2</button><button type="button" data-cmd="formatBlock" data-value="h3">H3</button><button type="button" data-cmd="bold">B</button><button type="button" data-cmd="italic">I</button><button type="button" data-cmd="insertUnorderedList">List</button><button type="button" data-cmd="insertOrderedList">1. List</button><button type="button" data-action="link">Link</button><button type="button" data-action="quote">Quote</button><button type="button" data-action="table">Table</button><button type="button" data-action="youtube">YouTube</button><button type="button" data-action="image">Image</button><button type="button" data-action="code">HTML</button></div><input id="editorImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden><div id="editor" class="rich-editor" contenteditable="true">${sanitizeHtml(blog.content || '<p>Write your blog content here...</p>')}</div><textarea name="content" id="contentInput" hidden></textarea></section><div class="form-actions"><button class="btn primary" type="submit">${isEdit ? 'Update Blog' : 'Save Blog'}</button><a class="btn ghost" href="/admin/blogs">Cancel</a></div></form>`);
 }
 
 function toLocalInput(iso) {
@@ -510,8 +466,8 @@ function publicLayout({ title, description, canonical, image, type = 'website', 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>${escapeHtml(title)}</title><meta name="description" content="${escapeHtml(description)}"><meta name="robots" content="index, follow"><link rel="canonical" href="${escapeHtml(canonical)}"><meta property="og:title" content="${escapeHtml(title)}"><meta property="og:description" content="${escapeHtml(description)}"><meta property="og:type" content="${escapeHtml(type)}"><meta property="og:url" content="${escapeHtml(canonical)}"><meta property="og:image" content="${escapeHtml(image || 'https://www.acmeinfotechsecuritysystem.com/images/blog_cctv.png')}"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${escapeHtml(title)}"><meta name="twitter:description" content="${escapeHtml(description)}"><meta name="twitter:image" content="${escapeHtml(image || 'https://www.acmeinfotechsecuritysystem.com/images/blog_cctv.png')}"><meta name="theme-color" content="#2563EB"><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/style.css"><script src="https://unpkg.com/lucide@latest"></script>${schema}</head><body class="page-shell"><nav id="nav"><a href="/" class="nav-logo"><div class="logo-mark"><svg viewBox="0 0 24 24"><path d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" /></svg></div>Acme Infotech</a><ul class="nav-links"><li><a href="/#services">Services</a></li><li><a href="/#products">Products</a></li><li><a href="/blog">Blog</a></li><li><a href="/#contact" class="nav-pill">Get Quote</a></li></ul><div class="ham" onclick="toggleMob()"><span></span><span></span><span></span></div><div class="mob-nav" id="mobNav"><a href="/#services">Services</a><a href="/#products">Products</a><a href="/blog">Blog</a><a href="/#contact">Contact / Quote</a></div></nav>${body}<footer><div class="foot-wrap"><div class="foot-bottom"><span>&copy; 2025 Acme Infotech Security System. All Rights Reserved.</span><span>GST: 24AMZPV7358R1ZG | Prop: Dhaval Variya</span></div></div></footer><script>function toggleMob(){document.getElementById('mobNav').classList.toggle('open')}window.addEventListener('scroll',function(){document.getElementById('nav').classList.toggle('solid',window.scrollY>40)});lucide.createIcons();</script></body></html>`;
 }
 
-function renderBlogList() {
-  const blogs = db.prepare(`SELECT blogs.*, categories.name AS category_name FROM blogs LEFT JOIN categories ON categories.id = blogs.category_id WHERE status = 'published' OR (status = 'scheduled' AND published_at IS NOT NULL AND datetime(published_at) <= datetime(?)) ORDER BY datetime(published_at) DESC, id DESC`).all(nowIso());
+async function renderBlogList() {
+  const blogs = await db.prepare(`SELECT blogs.*, categories.name AS category_name FROM blogs LEFT JOIN categories ON categories.id = blogs.category_id WHERE status = 'published' OR (status = 'scheduled' AND published_at IS NOT NULL AND published_at <= $1::timestamp) ORDER BY published_at DESC, id DESC`).all(nowIso());
   const cards = blogs.map(b => `<a class="blog-card-link" href="/blog/${escapeHtml(b.slug)}"><article class="blog-card"><div class="blog-img blog-img-fit"><img class="blog-thumb-img" src="${escapeHtml(b.featured_image || '/images/blog_cctv.png')}" alt="${escapeHtml(b.featured_image_alt || b.title)}" loading="lazy"><span class="blog-cat-badge">${escapeHtml(b.category_name || 'Security')}</span></div><div class="blog-body"><div class="blog-meta"><span>${formatDate(b.published_at)}</span><span>${readTime(b.content)} min read</span></div><h2 class="blog-title">${escapeHtml(b.title)}</h2><p class="blog-exc">${escapeHtml(b.excerpt)}</p><span class="blog-link">Read More</span></div></article></a>`).join('');
   const schema = `<script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', '@type': 'Blog', name: 'Security Blog Surat', url: 'https://www.acmeinfotechsecuritysystem.com/blog', blogPost: blogs.map(b => ({ '@type': 'BlogPosting', headline: b.title, url: `https://www.acmeinfotechsecuritysystem.com/blog/${b.slug}` })) })}</script>`;
   return publicLayout({
@@ -524,15 +480,15 @@ function renderBlogList() {
   });
 }
 
-function renderBlogDetail(slug) {
-  const b = db.prepare(`SELECT blogs.*, categories.name AS category_name FROM blogs LEFT JOIN categories ON categories.id = blogs.category_id WHERE blogs.slug = ? AND (blogs.status = 'published' OR (blogs.status = 'scheduled' AND blogs.published_at IS NOT NULL AND datetime(blogs.published_at) <= datetime(?)))`).get(slug, nowIso());
+async function renderBlogDetail(slug) {
+  const b = await db.prepare(`SELECT blogs.*, categories.name AS category_name FROM blogs LEFT JOIN categories ON categories.id = blogs.category_id WHERE blogs.slug = ? AND (blogs.status = 'published' OR (blogs.status = 'scheduled' AND blogs.published_at IS NOT NULL AND datetime(blogs.published_at) <= datetime(?)))`).get(slug, nowIso());
   if (!b) return null;
   const title = b.seo_title || b.title;
   const desc = b.meta_description || b.excerpt;
   const canonical = b.canonical_url || `https://www.acmeinfotechsecuritysystem.com/blog/${b.slug}`;
   const image = absoluteUrl(b.og_image || b.featured_image || '/images/blog_cctv.png');
   const schema = `<script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', '@type': 'BlogPosting', headline: b.title, description: desc, image, datePublished: b.published_at || b.created_at, dateModified: b.updated_at, author: { '@type': 'Organization', name: b.author }, publisher: { '@type': 'Organization', name: 'Acme Infotech Security System' }, mainEntityOfPage: canonical, keywords: b.focus_keyword })}</script><script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Home', item: 'https://www.acmeinfotechsecuritysystem.com/' }, { '@type': 'ListItem', position: 2, name: 'Blog', item: 'https://www.acmeinfotechsecuritysystem.com/blog' }, { '@type': 'ListItem', position: 3, name: b.title, item: canonical }] })}</script>`;
-  const related = db.prepare(`SELECT title, slug FROM blogs WHERE (status = 'published' OR (status = 'scheduled' AND published_at IS NOT NULL AND datetime(published_at) <= datetime(?))) AND id != ? ORDER BY datetime(published_at) DESC LIMIT 4`).all(nowIso(), b.id);
+  const related = await db.prepare(`SELECT title, slug FROM blogs WHERE (status = 'published' OR (status = 'scheduled' AND published_at IS NOT NULL AND published_at <= $1::timestamp)) AND id != ? ORDER BY published_at DESC LIMIT 4`).all(nowIso(), b.id);
   return publicLayout({
     title,
     description: desc,
@@ -560,8 +516,8 @@ function readTime(html) {
   return Math.max(1, Math.ceil(words / 180));
 }
 
-function latestBlogsJson(limit = 8) {
-  const blogs = db.prepare(`SELECT blogs.*, categories.name AS category_name FROM blogs LEFT JOIN categories ON categories.id = blogs.category_id WHERE status = 'published' OR (status = 'scheduled' AND published_at IS NOT NULL AND datetime(published_at) <= datetime(?)) ORDER BY datetime(published_at) DESC, id DESC LIMIT ?`).all(nowIso(), limit);
+async function latestBlogsJson(limit = 8) {
+  const blogs = await db.prepare(`SELECT blogs.*, categories.name AS category_name FROM blogs LEFT JOIN categories ON categories.id = blogs.category_id WHERE status = 'published' OR (status = 'scheduled' AND published_at IS NOT NULL AND published_at <= $1::timestamp) ORDER BY published_at DESC, id DESC LIMIT ?`).all(nowIso(), limit);
   return blogs.map(b => ({
     title: b.title,
     slug: b.slug,
@@ -576,7 +532,7 @@ function latestBlogsJson(limit = 8) {
 }
 
 async function latestBlogsPayload(limit = 8) {
-  const localBlogs = latestBlogsJson(limit);
+  const localBlogs = await latestBlogsJson(limit);
   if (process.env.VERCEL || process.env.USE_LOCAL_BLOG_DB === '1') return localBlogs;
   try {
     const controller = new AbortController();
@@ -598,14 +554,14 @@ async function latestBlogsPayload(limit = 8) {
   }
 }
 
-function renderDashboard(user) {
-  const stats = db.prepare(`SELECT COUNT(*) total, SUM(status='published') published, SUM(status='draft') draft, SUM(status='scheduled') scheduled FROM blogs`).get();
-  const cats = db.prepare('SELECT COUNT(*) total FROM categories').get().total;
-  const recent = db.prepare(`SELECT blogs.*, categories.name AS category_name FROM blogs LEFT JOIN categories ON categories.id = blogs.category_id ORDER BY datetime(updated_at) DESC LIMIT 6`).all();
+async function renderDashboard(user) {
+  const stats = await db.prepare(`SELECT COUNT(*) total, SUM(status='published') published, SUM(status='draft') draft, SUM(status='scheduled') scheduled FROM blogs`).get();
+  const cats = await (await db.prepare('SELECT COUNT(*) total FROM categories').get()).total;
+  const recent = await db.prepare(`SELECT blogs.*, categories.name AS category_name FROM blogs LEFT JOIN categories ON categories.id = blogs.category_id ORDER BY updated_at DESC LIMIT 6`).all();
   return adminLayout('Dashboard', user, `<section class="page-head"><div><h1>Dashboard</h1><p>Manage ACME Infotech CCTV blogs, SEO and categories.</p></div><a class="btn primary" href="/admin/blogs/new">Add New Blog</a></section><section class="stats"><div><strong>${stats.total || 0}</strong><span>Total Blogs</span></div><div><strong>${stats.published || 0}</strong><span>Published Blogs</span></div><div><strong>${stats.scheduled || 0}</strong><span>Scheduled Blogs</span></div><div><strong>${stats.draft || 0}</strong><span>Draft Blogs</span></div><div><strong>${cats || 0}</strong><span>Categories</span></div></section><section class="panel"><div class="panel-head"><h2>Recent Blogs</h2><a href="/admin/blogs">View all</a></div><table class="admin-table"><thead><tr><th>Title</th><th>Category</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>${recent.map(b => `<tr><td>${escapeHtml(b.title)}</td><td>${escapeHtml(b.category_name || '-')}</td><td><span class="status ${b.status}">${b.status}</span></td><td>${formatDate(b.updated_at)}</td><td><a href="/admin/blogs/${b.id}/edit">Edit</a></td></tr>`).join('')}</tbody></table></section>`);
 }
 
-function renderBlogs(user, reqUrl) {
+async function renderBlogs(user, reqUrl) {
   const url = new URL(reqUrl, 'http://local');
   const search = url.searchParams.get('q') || '';
   const category = url.searchParams.get('category') || '';
@@ -614,14 +570,14 @@ function renderBlogs(user, reqUrl) {
   const params = [];
   if (search) { sql += ' AND (blogs.title LIKE ? OR blogs.excerpt LIKE ? OR blogs.focus_keyword LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
   if (category) { sql += ' AND blogs.category_id = ?'; params.push(category); }
-  sql += sort === 'oldest' ? ' ORDER BY datetime(blogs.created_at) ASC' : ' ORDER BY datetime(blogs.created_at) DESC';
-  const blogs = db.prepare(sql).all(...params);
-  const cats = db.prepare('SELECT * FROM categories ORDER BY name').all();
+  sql += sort === 'oldest' ? ' ORDER BY blogs.created_at ASC' : ' ORDER BY blogs.created_at DESC';
+  const blogs = await db.prepare(sql).all(...params);
+  const cats = await db.prepare('SELECT * FROM categories ORDER BY name').all();
   return adminLayout('Blogs', user, `<section class="page-head"><div><h1>Blogs</h1><p>Search, filter, publish, schedule, unpublish, edit and delete blog posts.</p></div><a class="btn primary" href="/admin/blogs/new">Add New Blog</a></section><form class="filters" method="get"><input name="q" placeholder="Search blogs" value="${escapeHtml(search)}"><select name="category"><option value="">All Categories</option>${cats.map(c => `<option value="${c.id}" ${String(c.id) === category ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select><select name="sort"><option value="latest" ${sort === 'latest' ? 'selected' : ''}>Latest</option><option value="oldest" ${sort === 'oldest' ? 'selected' : ''}>Oldest</option></select><button class="btn ghost" type="submit">Apply</button></form><section class="panel"><table class="admin-table"><thead><tr><th>Blog</th><th>Category</th><th>Status</th><th>Publish / Schedule Date</th><th>Actions</th></tr></thead><tbody>${blogs.map(b => `<tr><td><strong>${escapeHtml(b.title)}</strong><small>${escapeHtml(b.slug)}</small></td><td>${escapeHtml(b.category_name || '-')}</td><td><span class="status ${b.status}">${b.status}</span></td><td>${formatDate(b.published_at)}</td><td class="actions"><a href="/blog/${escapeHtml(b.slug)}" target="_blank">View</a><a href="/admin/blogs/${b.id}/edit">Edit</a><form method="post" action="/admin/blogs/${b.id}/toggle"><input type="hidden" name="csrf" value="${escapeHtml(user.csrf_token)}"><button type="submit">${b.status === 'published' ? 'Unpublish' : 'Publish Now'}</button></form><form method="post" action="/admin/blogs/${b.id}/delete" onsubmit="return confirm('Delete this blog permanently?')"><input type="hidden" name="csrf" value="${escapeHtml(user.csrf_token)}"><button class="danger" type="submit">Delete</button></form></td></tr>`).join('')}</tbody></table></section>`);
 }
 
-function renderCategories(user) {
-  const cats = db.prepare('SELECT categories.*, COUNT(blogs.id) AS blog_count FROM categories LEFT JOIN blogs ON blogs.category_id = categories.id GROUP BY categories.id ORDER BY categories.name').all();
+async function renderCategories(user) {
+  const cats = await db.prepare('SELECT categories.*, COUNT(blogs.id) AS blog_count FROM categories LEFT JOIN blogs ON blogs.category_id = categories.id GROUP BY categories.id ORDER BY categories.name').all();
   return adminLayout('Categories', user, `<section class="page-head"><div><h1>Categories</h1><p>Create categories used by public blog filters and SEO.</p></div></section><section class="category-grid"><form class="panel form-stack" method="post" action="/admin/categories"><input type="hidden" name="csrf" value="${escapeHtml(user.csrf_token)}"><label>Name<input name="name" required></label><label>Slug<input name="slug" placeholder="Auto generated if blank"></label><label>Description<textarea name="description" rows="4"></textarea></label><button class="btn primary" type="submit">Add Category</button></form><div class="panel"><table class="admin-table"><thead><tr><th>Name</th><th>Slug</th><th>Blogs</th></tr></thead><tbody>${cats.map(c => `<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.slug)}</td><td>${c.blog_count}</td></tr>`).join('')}</tbody></table></div></section>`);
 }
 
@@ -629,7 +585,7 @@ async function handleAdminPost(req, res, pathname) {
   const user = currentUser(req);
   if (pathname === '/admin/login') {
     const form = parseUrlEncoded(await readBody(req));
-    const admin = db.prepare('SELECT * FROM users WHERE email = ?').get(String(form.email || '').toLowerCase());
+    const admin = await db.prepare('SELECT * FROM users WHERE email = ?').get(String(form.email || '').toLowerCase());
     if (!admin || !verifyPassword(form.password || '', admin.password)) return send(res, 401, loginPage('Invalid email or password.'));
     return redirectWithCookie(res, '/admin', createSessionCookie(admin));
   }
@@ -638,14 +594,14 @@ async function handleAdminPost(req, res, pathname) {
   const raw = await readBody(req);
   const parsed = contentType.includes('multipart/form-data') ? parseMultipart(raw, contentType) : { fields: parseUrlEncoded(raw), files: {} };
   const form = parsed.fields;
-  if (!checkCsrf(req, form)) return send(res, 403, 'Invalid CSRF token.');
+  if (!(await checkCsrf(req, form))) return send(res, 403, 'Invalid CSRF token.');
   if (pathname === '/admin/logout') {
     res.writeHead(302, { Location: '/admin/login', 'Set-Cookie': 'sid=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0' });
     return res.end();
   }
   if (pathname === '/admin/blogs/new' || /^\/admin\/blogs\/\d+\/edit$/.test(pathname)) {
     const id = Number(pathname.match(/\d+/)?.[0] || 0);
-    let existing = id ? db.prepare('SELECT * FROM blogs WHERE id = ?').get(id) : {};
+    let existing = id ? await db.prepare('SELECT * FROM blogs WHERE id = ?').get(id) : {};
     let featured = existing.featured_image || '';
     let og = existing.og_image || '';
     try {
@@ -654,7 +610,7 @@ async function handleAdminPost(req, res, pathname) {
     } catch (e) {
       return send(res, 400, adminLayout('Upload Error', user, `<div class="alert">${escapeHtml(e.message)}</div><p><a href="/admin/blogs">Back to blogs</a></p>`));
     }
-    const slug = ensureUniqueSlug(form.slug || form.title, id);
+    const slug = await ensureUniqueSlug(form.slug || form.title, id);
     const submittedStatus = ['draft', 'published', 'scheduled'].includes(form.status) ? form.status : 'draft';
     const requestedDate = form.published_at ? new Date(form.published_at).toISOString() : '';
     const publishedAt = submittedStatus === 'published'
@@ -669,30 +625,26 @@ async function handleAdminPost(req, res, pathname) {
       og, form.og_image_alt || form.featured_image_alt || form.title
     ];
     if (id) {
-      db.prepare(`UPDATE blogs SET title=?,slug=?,excerpt=?,content=?,featured_image=?,featured_image_alt=?,category_id=?,author=?,status=?,published_at=?,updated_at=?,seo_title=?,meta_description=?,focus_keyword=?,canonical_url=?,og_image=?,og_image_alt=? WHERE id=?`).run(...values, id);
+      await db.prepare(`UPDATE blogs SET title=?,slug=?,excerpt=?,content=?,featured_image=?,featured_image_alt=?,category_id=?,author=?,status=?,published_at=?,updated_at=?,seo_title=?,meta_description=?,focus_keyword=?,canonical_url=?,og_image=?,og_image_alt=? WHERE id=?`).run(...values, id);
     } else {
-      db.prepare(`INSERT INTO blogs (title,slug,excerpt,content,featured_image,featured_image_alt,category_id,author,status,published_at,updated_at,seo_title,meta_description,focus_keyword,canonical_url,og_image,og_image_alt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(...values);
+      await db.prepare(`INSERT INTO blogs (title,slug,excerpt,content,featured_image,featured_image_alt,category_id,author,status,published_at,updated_at,seo_title,meta_description,focus_keyword,canonical_url,og_image,og_image_alt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(...values);
     }
-    await persistDbToBlob();
-    return send(res, 200, renderBlogs(user));
+        return send(res, 200, await renderBlogs(user));
   }
   if (/^\/admin\/blogs\/\d+\/toggle$/.test(pathname)) {
     const id = Number(pathname.match(/\d+/)[0]);
-    const b = db.prepare('SELECT * FROM blogs WHERE id = ?').get(id);
-    if (b) db.prepare(`UPDATE blogs SET status = ?, published_at = ?, updated_at = ? WHERE id = ?`).run(b.status === 'published' ? 'draft' : 'published', b.status === 'published' ? b.published_at : nowIso(), nowIso(), id);
-    await persistDbToBlob();
-    return send(res, 200, renderBlogs(user));
+    const b = await db.prepare('SELECT * FROM blogs WHERE id = ?').get(id);
+    if (b) await db.prepare(`UPDATE blogs SET status = ?, published_at = ?, updated_at = ? WHERE id = ?`).run(b.status === 'published' ? 'draft' : 'published', b.status === 'published' ? b.published_at : nowIso(), nowIso(), id);
+        return send(res, 200, renderBlogs(user));
   }
   if (/^\/admin\/blogs\/\d+\/delete$/.test(pathname)) {
-    db.prepare('DELETE FROM blogs WHERE id = ?').run(Number(pathname.match(/\d+/)[0]));
-    await persistDbToBlob();
-    return send(res, 200, renderBlogs(user));
+    await db.prepare('DELETE FROM blogs WHERE id = ?').run(Number(pathname.match(/\d+/)[0]));
+        return send(res, 200, renderBlogs(user));
   }
   if (pathname === '/admin/categories') {
     const slug = slugify(form.slug || form.name);
-    db.prepare('INSERT OR IGNORE INTO categories (name,slug,description) VALUES (?,?,?)').run(form.name, slug, form.description || '');
-    await persistDbToBlob();
-    return send(res, 200, renderCategories(user));
+    db.prepare('INSERT INTO categories (name,slug,description) VALUES (?,?,?) ON CONFLICT (slug) DO NOTHING').run(form.name, slug, form.description || '');
+        return send(res, 200, await renderCategories(user));
   }
   if (pathname === '/admin/upload') {
     try {
@@ -748,21 +700,21 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST') return handleAdminPost(req, res, pathname);
     if (pathname === '/admin/login') return send(res, 200, loginPage());
     if (pathname === '/admin') {
-      const user = requireAdmin(req, res); if (!user) return;
-      return send(res, 200, renderDashboard(user));
+      const user = await requireAdmin(req, res); if (!user) return;
+      return send(res, 200, await renderDashboard(user));
     }
     if (pathname === '/admin/blogs') {
       const user = requireAdmin(req, res); if (!user) return;
-      return send(res, 200, renderBlogs(user, req.url));
+      return send(res, 200, await renderBlogs(user, req.url));
     }
     if (pathname === '/admin/blogs/new') {
       const user = requireAdmin(req, res); if (!user) return;
-      return send(res, 200, blogForm(user));
+      return send(res, 200, await blogForm(user));
     }
     if (/^\/admin\/blogs\/\d+\/edit$/.test(pathname)) {
       const user = requireAdmin(req, res); if (!user) return;
-      const blog = db.prepare('SELECT * FROM blogs WHERE id = ?').get(Number(pathname.match(/\d+/)[0]));
-      return blog ? send(res, 200, blogForm(user, blog)) : send(res, 404, 'Blog not found');
+      const blog = await db.prepare('SELECT * FROM blogs WHERE id = ?').get(Number(pathname.match(/\d+/)[0]));
+      return blog ? send(res, 200, await blogForm(user, blog)) : send(res, 404, 'Blog not found');
     }
     if (pathname === '/admin/categories') {
       const user = requireAdmin(req, res); if (!user) return;
@@ -772,9 +724,9 @@ const server = http.createServer(async (req, res) => {
     if (pathname.startsWith('/blog/') && pathname.endsWith('.html')) {
       return redirect(res, pathname.slice(0, -5));
     }
-    if (pathname === '/blog') return send(res, 200, renderBlogList());
+    if (pathname === '/blog') return send(res, 200, await renderBlogList());
     if (pathname.startsWith('/blog/')) {
-      const html = renderBlogDetail(pathname.replace('/blog/', ''));
+      const html = await renderBlogDetail(pathname.replace('/blog/', ''));
       return html ? send(res, 200, html) : send(res, 404, 'Blog not found');
     }
     serveStatic(req, res, url.pathname);

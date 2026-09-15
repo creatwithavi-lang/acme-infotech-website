@@ -12,6 +12,8 @@
     "node": ">=24"
   },
   "dependencies": {
-    "@vercel/blob": "^2.8.0"
+    "@vercel/blob": "^2.8.0",
+    "@vercel/postgres": "^0.10.0",
+    "pg": "^8.23.0"
   }
 }

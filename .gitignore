@@ -1,0 +1,14 @@
+.DS_Store
+node_modules/
+dist/
+.env
+data/*.sqlite*
+uploads/blogs/*
+!uploads/blogs/.gitkeep
+split.ps1
+split.py
+
+.vercel
+
+.env*.local
+local-pgdata/

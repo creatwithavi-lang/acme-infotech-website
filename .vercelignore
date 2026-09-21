@@ -1,0 +1,12 @@
+# Never upload these to Vercel (they are not part of the website)
+.env*
+data
+uploads
+scripts
+tests
+deploy.js
+extract.py
+split.py
+split.ps1
+*.sqlite*
+.DS_Store

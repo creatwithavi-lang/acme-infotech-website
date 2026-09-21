@@ -1,0 +1,43 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": ["404.html", "index.html", "css/**", "js/**", "admin/admin.css", "admin/admin.js"]
+      }
+    },
+    { "src": "index.html", "use": "@vercel/static" },
+    { "src": "404.html", "use": "@vercel/static" },
+    { "src": "robots.txt", "use": "@vercel/static" },
+    { "src": "manifest.webmanifest", "use": "@vercel/static" },
+    { "src": "css/**", "use": "@vercel/static" },
+    { "src": "js/**", "use": "@vercel/static" },
+    { "src": "images/**", "use": "@vercel/static" },
+    { "src": "admin/admin.css", "use": "@vercel/static" },
+    { "src": "admin/admin.js", "use": "@vercel/static" }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "headers": {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-XSS-Protection": "1; mode=block",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload"
+      },
+      "continue": true
+    },
+    { "src": "/api(?:/(.*))?", "dest": "/server.js" },
+    { "src": "/admin/(admin\\.(?:css|js))", "dest": "/admin/$1" },
+    { "src": "/admin(?:/(.*))?", "dest": "/server.js" },
+    { "src": "/blog\\.html", "dest": "/server.js" },
+    { "src": "/blog(?:/(.*))?", "dest": "/server.js" },
+    { "src": "/sitemap\\.xml", "dest": "/server.js" },
+    { "src": "/uploads(?:/(.*))?", "dest": "/server.js" },
+    { "src": "/", "dest": "/index.html" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/404.html", "status": 404 }
+  ]
+}

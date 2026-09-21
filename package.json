@@ -16,6 +16,6 @@
     "@electric-sql/pglite": "^0.5.8",
     "@vercel/blob": "^2.8.0",
     "pg": "^8.23.0",
-    "sanitize-html": "^2.17.7"
+    "sanitize-html": "^2.11.0"
   }
 }

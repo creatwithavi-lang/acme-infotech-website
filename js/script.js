@@ -28,7 +28,7 @@ function sendViaWhatsApp(){
   const budget=document.getElementById('fb').value||'Not specified';
   const location=document.getElementById('fl').value||'Surat';
   const msg=document.getElementById('fm').value||'';
-  const wa_msg=`Hi Acme Infotech,\n\n*Name:* ${n}\n*Phone:* ${p}\n*Enquiry For:* ${service}\n*Location:* ${location}\n*Budget:* ${budget}\n*Message:* ${msg||'Please contact me for a quote.'}\n\nSent from acmeinfotechsecuritysystem.com`;
+  const wa_msg=`Hi Acme Infotech,\n\n*Name:* ${n}\n*Phone:* ${p}\n*Enquiry For:* ${service}\n*Location:* ${location}\n*Budget:* ${budget}\n*Message:* ${msg||'Please contact me for a quote.'}\n\nSent from acmeinfotechcctv.in`;
   const encoded=encodeURIComponent(wa_msg);
   window.open(`https://wa.me/919033999401?text=${encoded}`,'_blank');
   document.getElementById('formMsg').style.display='block';
@@ -51,7 +51,7 @@ function submitForm(){
   btn.textContent='Sending…';
   btn.disabled=true;
 
-  fetch('https://formsubmit.co/ajax/info@acmeinfotechsecuritysystem.com',{
+  fetch('https://formsubmit.co/ajax/info@acmeinfotechcctv.in',{
     method:'POST',
     headers:{'Content-Type':'application/json','Accept':'application/json'},
     body:JSON.stringify({

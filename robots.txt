@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://www.acmeinfotechsecuritysystem.com/sitemap.xml
+Sitemap: https://www.acmeinfotechcctv.in/sitemap.xml
